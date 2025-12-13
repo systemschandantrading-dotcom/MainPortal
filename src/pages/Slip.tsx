@@ -1,7 +1,56 @@
 // SLIP REACT
 import { useState, useEffect } from "react";
 import { Printer } from "lucide-react";
+import html2pdf from "html2pdf.js";
+
 const SCRIPT_URL = import.meta.env.VITE_APP_SCRIPT_URL;
+const DRIVE_FOLDER_ID = "1trTkjeNIjmT15fcGMgYZOIHVPqScK1Kb";
+
+interface SlipPayload {
+  slipType: "Get In" | "Get Out" | "Invoice";
+  slipNo: string;
+  date: string;
+  partyName: string;
+
+  // GET IN
+  place: string;
+  material: string;
+  bharti: string;
+  killa: string;
+  dharamKantaWeight: string;
+  qty: string;
+  rate: string;
+  truckNo: string;
+  driver: string;
+  mobileNo: string;
+  remarks: string;
+
+  // GET OUT
+  placeOut: string;
+  materialReceive: string;
+  jins: string;
+  netWeight: string;
+  qtyOut: string;
+  taadWeight: string;
+  truckNoOut: string;
+  driverOut: string;
+  remarksOut: string;
+
+  // INVOICE
+  lotNumber: string;
+  vehicleNumber: string;
+  storageFrom: string;
+  storageTo: string;
+  totalDays: string;
+  storageCharges: string;
+  hamaliCharges: string;
+  otherCharges: string;
+  grandTotal: string;
+  amountInWords: string;
+
+  // ⭐ IMPORTANT
+  pdfUrl?: string;
+}
 
 interface GetInSlip {
   id: number;
@@ -66,13 +115,16 @@ interface InvoiceSlip {
   createdAt: string;
 }
 
-type Slip = GetInSlip | GetOutSlip | InvoiceSlip;
+type Slip = (GetInSlip | GetOutSlip | InvoiceSlip) & {
+  pdfUrl?: string;
+};
 
 const SlipManagement = () => {
   const [loadingSlips, setLoadingSlips] = useState(true);   // history loading
   const [saving, setSaving] = useState(false);              // save buttons loading
   const [activeTab, setActiveTab] = useState("getIn");
   const [slips, setSlips] = useState<Slip[]>([]);
+  const [printingSlipId, setPrintingSlipId] = useState<number | null>(null);
 
   // Get In Form State
   const [getInForm, setGetInForm] = useState({
@@ -129,6 +181,8 @@ const SlipManagement = () => {
     try {
       const formData = new FormData();
       formData.append("action", "addSlipFull");
+
+      // ✅ SEND PAYLOAD AS JSON STRING
       formData.append("payload", JSON.stringify(payload));
 
       const res = await fetch(SCRIPT_URL, {
@@ -136,15 +190,27 @@ const SlipManagement = () => {
         body: formData,
       });
 
-      const data = await res.json();
+      const text = await res.text();
 
-      if (!data.success) {
-        alert("Error saving slip: " + data.error);
+      if (!text || text.trim() === "") {
+        return true;
       }
 
+      try {
+        const data = JSON.parse(text);
+        if (data.success === false) {
+          alert("Error saving slip: " + (data.error || "Unknown error"));
+          return false;
+        }
+      } catch {
+        console.warn("Non-JSON response ignored:", text);
+      }
+
+      return true;
     } catch (error) {
       console.error(error);
       alert("Network error while saving slip.");
+      return false;
     }
   };
 
@@ -155,8 +221,7 @@ const SlipManagement = () => {
       const data = await res.json();
 
       if (data.success) {
-        const cleaned = data.slips.slice(1);
-
+        const cleaned = data.slips.slice(1); // 🔥 header remove
         const formatted = cleaned.map((s: any, index: number) => ({
           id: index + 1,
           type: s.slipType,
@@ -202,6 +267,7 @@ const SlipManagement = () => {
           amountInWords: s.amountInWords,
 
           createdAt: s.timestamp,
+          pdfUrl: s.pdfUrl || "",
         }));
 
         setSlips(formatted);
@@ -217,17 +283,23 @@ const SlipManagement = () => {
   }, []);
 
   const handleGetOutSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    await saveSlipToSheet({
+  e.preventDefault();
+  setSaving(true);
+
+  try {
+    // 🔹 Payload
+    const payload: SlipPayload = {
       slipType: "Get Out",
       slipNo: getOutForm.serialNo,
       date: getOutForm.date,
       partyName: getOutForm.partyName,
 
-      // GET IN empty
+      // GET IN EMPTY
       place: "",
       material: "",
+      bharti: "",
+      killa: "",
+      dharamKantaWeight: "",
       qty: "",
       rate: "",
       truckNo: "",
@@ -235,7 +307,7 @@ const SlipManagement = () => {
       mobileNo: "",
       remarks: "",
 
-      // FULL GET OUT DATA
+      // GET OUT
       placeOut: getOutForm.place,
       materialReceive: getOutForm.materialReceive,
       jins: getOutForm.jins,
@@ -246,7 +318,7 @@ const SlipManagement = () => {
       driverOut: getOutForm.driver,
       remarksOut: getOutForm.remarks,
 
-      // invoice empty
+      // INVOICE EMPTY
       lotNumber: "",
       vehicleNumber: "",
       storageFrom: "",
@@ -257,12 +329,38 @@ const SlipManagement = () => {
       otherCharges: "",
       grandTotal: "",
       amountInWords: "",
+    };
 
-      pdfUrl: ""
-    });
+    // 🔹 Slip for PDF
+    const slipForPdf: GetOutSlip = {
+      id: 0,
+      type: "Get Out",
+      serialNo: getOutForm.serialNo,
+      date: getOutForm.date,
+      partyName: getOutForm.partyName,
+      placeOut: getOutForm.place,
+      materialReceive: getOutForm.materialReceive,
+      jins: getOutForm.jins,
+      netWeight: getOutForm.netWeight,
+      qtyOut: getOutForm.qty,
+      taadWeight: getOutForm.taadWeight,
+      truckNoOut: getOutForm.truckNo,
+      driverOut: getOutForm.driver,
+      remarksOut: getOutForm.remarks,
+      createdAt: "",
+    };
 
-    fetchSlips(); // ⬅️ reload from sheet
+    // 🔹 Generate PDF FIRST
+    const pdfUrl = await generateAndStorePdf(slipForPdf);
+    payload.pdfUrl = pdfUrl;
 
+    // 🔹 Save ONCE
+    const saved = await saveSlipToSheet(payload);
+    if (!saved) return;
+
+    await fetchSlips();
+
+    // ✅ RESET GET OUT FORM
     setGetOutForm({
       serialNo: "",
       date: new Date().toISOString().split("T")[0],
@@ -277,145 +375,231 @@ const SlipManagement = () => {
       driver: "",
       remarks: "",
     });
+
+    alert("Get Out slip saved & PDF generated!");
+  } finally {
     setSaving(false);
-    alert("Get Out slip saved successfully!");
-  };
+  }
+};
 
   // ⭐ ADD THIS FUNCTION
   const handleGetInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await saveSlipToSheet({
-      slipType: "Get In",
-      slipNo: getInForm.serialNo,
-      date: getInForm.date,
-      partyName: getInForm.partyName,
 
-      // FULL FIELDS
-      place: getInForm.place,
-      material: getInForm.material,
-      bharti: getInForm.bharti,
-      killa: getInForm.killa,
-      dharamKantaWeight: getInForm.dharamKantaWeight,
-      qty: getInForm.qty,
-      rate: getInForm.rate,
-      truckNo: getInForm.truckNo,
-      driver: getInForm.driver,
-      mobileNo: getInForm.mobileNo,
-      remarks: getInForm.remarks,
+    try {
+      const payload: SlipPayload = {
+        slipType: "Get In",
+        slipNo: getInForm.serialNo,
+        date: getInForm.date,
+        partyName: getInForm.partyName,
 
-      // avoid undefined
-      placeOut: "",
-      materialReceive: "",
-      jins: "",
-      netWeight: "",
-      qtyOut: "",
-      taadWeight: "",
-      truckNoOut: "",
-      driverOut: "",
-      remarksOut: "",
+        place: getInForm.place,
+        material: getInForm.material,
+        bharti: getInForm.bharti,
+        killa: getInForm.killa,
+        dharamKantaWeight: getInForm.dharamKantaWeight,
+        qty: getInForm.qty,
+        rate: getInForm.rate,
+        truckNo: getInForm.truckNo,
+        driver: getInForm.driver,
+        mobileNo: getInForm.mobileNo,
+        remarks: getInForm.remarks,
 
-      // invoice empty
-      lotNumber: "",
-      vehicleNumber: "",
-      storageFrom: "",
-      storageTo: "",
-      totalDays: "",
-      storageCharges: "",
-      hamaliCharges: "",
-      otherCharges: "",
-      grandTotal: "",
-      amountInWords: "",
+        // GET OUT EMPTY
+        placeOut: "",
+        materialReceive: "",
+        jins: "",
+        netWeight: "",
+        qtyOut: "",
+        taadWeight: "",
+        truckNoOut: "",
+        driverOut: "",
+        remarksOut: "",
 
-      pdfUrl: ""
-    });
+        // INVOICE EMPTY
+        lotNumber: "",
+        vehicleNumber: "",
+        storageFrom: "",
+        storageTo: "",
+        totalDays: "",
+        storageCharges: "",
+        hamaliCharges: "",
+        otherCharges: "",
+        grandTotal: "",
+        amountInWords: "",
+      };
 
-    fetchSlips(); // reload from sheet
+      const slipForPdf: GetInSlip = {
+        id: 0,
+        type: "Get In",
+        serialNo: getInForm.serialNo,
+        date: getInForm.date,
+        partyName: getInForm.partyName,
+        place: getInForm.place,
+        material: getInForm.material,
+        bharti: getInForm.bharti,
+        killa: getInForm.killa,
+        dharamKantaWeight: getInForm.dharamKantaWeight,
+        qty: getInForm.qty,
+        rate: getInForm.rate,
+        truckNo: getInForm.truckNo,
+        driver: getInForm.driver,
+        mobileNo: getInForm.mobileNo,
+        remarks: getInForm.remarks,
+        createdAt: "",
+      };
 
-    setGetInForm({
-      serialNo: "",
-      date: new Date().toISOString().split("T")[0],
-      partyName: "",
-      place: "",
-      material: "",
-      bharti: "",
-      killa: "",
-      dharamKantaWeight: "",
-      qty: "",
-      rate: "",
-      truckNo: "",
-      driver: "",
-      mobileNo: "",
-      remarks: "",
-    });
-    setSaving(false);
-    alert("Get In slip saved successfully!");
+      const pdfUrl = await generateAndStorePdf(slipForPdf);
+      payload.pdfUrl = pdfUrl;
+
+      const saved = await saveSlipToSheet(payload);
+      if (!saved) return;
+
+      await fetchSlips();
+
+      // ✅ RESET GET IN FORM
+      setGetInForm({
+        serialNo: "",
+        date: new Date().toISOString().split("T")[0],
+        partyName: "",
+        place: "",
+        material: "",
+        bharti: "",
+        killa: "",
+        dharamKantaWeight: "",
+        qty: "",
+        rate: "",
+        truckNo: "",
+        driver: "",
+        mobileNo: "",
+        remarks: "",
+      });
+      alert("Get In slip saved & PDF generated!");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleInvoiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await saveSlipToSheet({
-      slipType: "Invoice",
-      slipNo: invoiceForm.invoiceNo,
-      date: invoiceForm.date,
-      partyName: invoiceForm.partyName,
 
-      // GET IN empty
-      place: "",
-      material: "",
-      qty: "",
-      rate: "",
-      truckNo: "",
-      driver: "",
-      mobileNo: "",
-      remarks: "",
+    try {
+      // 🔹 Payload (for Sheet)
+      const payload: SlipPayload = {
+        slipType: "Invoice",
+        slipNo: invoiceForm.invoiceNo,
+        date: invoiceForm.date,
+        partyName: invoiceForm.partyName,
 
-      // GET OUT empty
-      placeOut: "",
-      materialReceive: "",
-      jins: "",
-      netWeight: "",
-      qtyOut: "",
-      taadWeight: "",
-      truckNoOut: "",
-      driverOut: "",
-      remarksOut: "",
+        // GET IN EMPTY
+        place: "",
+        material: "",
+        bharti: "",
+        killa: "",
+        dharamKantaWeight: "",
+        qty: "",
+        rate: "",
+        truckNo: "",
+        driver: "",
+        mobileNo: "",
+        remarks: "",
 
-      // FULL INVOICE FIELDS
-      lotNumber: invoiceForm.lotNumber,
-      vehicleNumber: invoiceForm.vehicleNumber,
-      storageFrom: invoiceForm.storageFrom,
-      storageTo: invoiceForm.storageTo,
-      totalDays: invoiceForm.totalDays,
-      storageCharges: invoiceForm.storageCharges,
-      hamaliCharges: invoiceForm.hamaliCharges,
-      otherCharges: invoiceForm.otherCharges,
-      grandTotal: invoiceForm.grandTotal,
-      amountInWords: invoiceForm.amountInWords,
+        // GET OUT EMPTY
+        placeOut: "",
+        materialReceive: "",
+        jins: "",
+        netWeight: "",
+        qtyOut: "",
+        taadWeight: "",
+        truckNoOut: "",
+        driverOut: "",
+        remarksOut: "",
 
-      pdfUrl: ""
-    });
+        // INVOICE DATA
+        lotNumber: invoiceForm.lotNumber,
+        vehicleNumber: invoiceForm.vehicleNumber,
+        storageFrom: invoiceForm.storageFrom,
+        storageTo: invoiceForm.storageTo,
+        totalDays: invoiceForm.totalDays,
+        storageCharges: invoiceForm.storageCharges,
+        hamaliCharges: invoiceForm.hamaliCharges,
+        otherCharges: invoiceForm.otherCharges,
+        grandTotal: invoiceForm.grandTotal,
+        amountInWords: invoiceForm.amountInWords,
+      };
 
-    fetchSlips(); // ⬅️ reload from sheet
+      // 🔹 Slip object ONLY for PDF generation
+      const slipForPdf: InvoiceSlip = {
+        id: 0,
+        type: "Invoice",
+        invoiceNo: invoiceForm.invoiceNo,
+        date: invoiceForm.date,
+        partyName: invoiceForm.partyName,
+        lotNumber: invoiceForm.lotNumber,
+        vehicleNumber: invoiceForm.vehicleNumber,
+        storageFrom: invoiceForm.storageFrom,
+        storageTo: invoiceForm.storageTo,
+        totalDays: invoiceForm.totalDays,
+        storageCharges: invoiceForm.storageCharges,
+        hamaliCharges: invoiceForm.hamaliCharges,
+        otherCharges: invoiceForm.otherCharges,
+        grandTotal: invoiceForm.grandTotal,
+        amountInWords: invoiceForm.amountInWords,
+        createdAt: "",
+      };
 
-    setInvoiceForm({
-      invoiceNo: "",
-      date: new Date().toISOString().split("T")[0],
-      partyName: "",
-      lotNumber: "",
-      vehicleNumber: "",
-      storageFrom: "",
-      storageTo: "",
-      totalDays: "",
-      storageCharges: "",
-      hamaliCharges: "",
-      otherCharges: "",
-      grandTotal: "",
-      amountInWords: "",
-    });
-    setSaving(false);
-    alert("Invoice created successfully!");
+      // 🔹 1️⃣ Generate PDF FIRST
+      const pdfUrl = await generateAndStorePdf(slipForPdf);
+
+      // 🔹 2️⃣ Attach PDF URL
+      payload.pdfUrl = pdfUrl;
+
+      // 🔹 3️⃣ Save ONCE (sheet + column F)
+      const saved = await saveSlipToSheet(payload);
+      if (!saved) return;
+
+      // 🔹 4️⃣ Refresh history
+      await fetchSlips();
+
+      // 🔹 Reset form
+      setInvoiceForm({
+        invoiceNo: "",
+        date: new Date().toISOString().split("T")[0],
+        partyName: "",
+        lotNumber: "",
+        vehicleNumber: "",
+        storageFrom: "",
+        storageTo: "",
+        totalDays: "",
+        storageCharges: "",
+        hamaliCharges: "",
+        otherCharges: "",
+        grandTotal: "",
+        amountInWords: "",
+      });
+
+      setInvoiceForm({
+        invoiceNo: "",
+        date: new Date().toISOString().split("T")[0],
+        partyName: "",
+        lotNumber: "",
+        vehicleNumber: "",
+        storageFrom: "",
+        storageTo: "",
+        totalDays: "",
+        storageCharges: "",
+        hamaliCharges: "",
+        otherCharges: "",
+        grandTotal: "",
+        amountInWords: "",
+      });
+
+      alert("Invoice saved & PDF generated!");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const formatSlipDate = (d: string) => {
@@ -427,307 +611,741 @@ const SlipManagement = () => {
     return `${day}/${month}/${year}`;
   };
 
-  const printSlip = (slip: Slip) => {
-    const printWindow = window.open('', '', 'height=600,width=800');
-    
-    if (!printWindow) return;
-    
+  const getPdfBgClass = (type: Slip["type"]) => {
+    if (type === "Get In") return "bg-get-in";
+    if (type === "Get Out") return "bg-get-out";
+    return "bg-invoice";
+  };
+
+  const getSlipHTML = (slip: Slip) => {
     if (slip.type === "Get In") {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Get In Slip</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 20px; background: #ffffcc; }
-              .header { text-align: center; margin-bottom: 20px; }
-              .header h2 { margin: 5px 0; }
-              .content { border: 2px solid #000; padding: 15px; }
-              .row { display: flex; margin-bottom: 10px; }
-              .label { width: 150px; font-weight: bold; }
-              .value { flex: 1; border-bottom: 1px solid #000; }
-              .footer { text-align: right; margin-top: 30px; }
-            </style>
-          </head>
-          <body>
+      return `
+      <html>
+        <head>
+          <title>Get In Slip</title>
+          <style>
+            @page {
+              size: A4;
+              margin: 10mm;
+            }
+
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, sans-serif;
+              background: white;
+            }
+
+            .pdf-page {
+              min-height: 100%;
+              padding: 18px 22px;
+              border: 2px solid #000;
+              box-sizing: border-box;
+              background-color: #fff7c2;
+            }
+
+            .header {
+              text-align: center;
+              margin-bottom: 12px;
+            }
+
+            .header h2 {
+              margin: 4px 0;
+            }
+
+            .header p {
+              margin: 2px 0;
+              font-size: 13px;
+            }
+
+            .divider {
+              border-top: 2px solid #000;
+              margin: 10px 0 14px;
+            }
+
+            .row {
+              display: flex;
+              margin-bottom: 9px;
+              font-size: 13px;
+            }
+
+            .label {
+              width: 160px;
+              font-weight: bold;
+            }
+
+            .value {
+              flex: 1;
+              border-bottom: 1px solid #000;
+              padding-left: 6px;
+            }
+
+            .footer-sign {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 40px;
+              font-weight: bold;
+              font-size: 13px;
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="pdf-page">
+
             <div class="header">
-              <h3>आवक पर्ची / Provisional Receipt</h3>
+              <strong>आवक पर्ची / Provisional Receipt</strong>
               <h2>BMS COLD STORAGE</h2>
               <p>(A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)</p>
               <p>Village - BANA (DHARSIWA) RAIPUR 492099</p>
               <p>Mob.: 7024566009, 7024066009</p>
               <p>E-mail: bmscoldstorage@gmail.com</p>
             </div>
-            <div class="content">
-              <div class="row">
-                <div class="label">क्र.:</div>
-                <div class="value">${slip.serialNo}</div>
-                <div class="label">दिनांक:</div>
-                <div class="value">${formatSlipDate(slip.date)}</div>
-              </div>
-              <div class="row">
-                <div class="label">पार्टी का नाम:</div>
-                <div class="value">${slip.partyName}</div>
-              </div>
-              <div class="row">
-                <div class="label">मार्फत / एजेंट:</div>
-                <div class="value">${slip.place || ''}</div>
-              </div>
-              <div class="row">
-                <div class="label">जिन्स:</div>
-                <div class="value">${slip.material}</div>
-              </div>
-              <div class="row">
-                <div class="label">भरती:</div>
-                <div class="value">${slip.bharti || ''}</div>
-              </div>
-              <div class="row">
-                <div class="label">किल्ला:</div>
-                <div class="value">${slip.killa || ''}</div>
-              </div>
-              <div class="row">
-                <div class="label">धरमकाँटा वजन:</div>
-                <div class="value">${slip.dharamKantaWeight || ''}</div>
-              </div>
-              <div class="row">
-                <div class="label">ताड़ वजन:</div>
-                <div class="value">${slip.qty} / ${slip.rate}</div>
-              </div>
-              <div class="row">
-                <div class="label">ट्रक नं.:</div>
-                <div class="value">${slip.truckNo}</div>
-              </div>
-              <div class="row">
-                <div class="label">ड्राइवर:</div>
-                <div class="value">${slip.driver || ''}</div>
-              </div>
-              <div class="row">
-                <div class="label">मोबाइल नं.:</div>
-                <div class="value">${slip.mobileNo || ''}</div>
-              </div>
-              <div class="row">
-                <div class="label">रिमार्क्स:</div>
-                <div class="value">${slip.remarks || ''}</div>
-              </div>
+
+            <div class="divider"></div>
+
+            <div class="row">
+              <div class="label">क्र.:</div>
+              <div class="value">${slip.serialNo}</div>
+              <div class="label">दिनांक:</div>
+              <div class="value">${formatSlipDate(slip.date)}</div>
             </div>
-            <div class="footer">
-              <p>प्रतिनिधि / ड्राइवर के हस्ताक्षर __________ प्रबंधक</p>
+
+            <div class="row">
+              <div class="label">पार्टी का नाम:</div>
+              <div class="value">${slip.partyName}</div>
             </div>
-          </body>
-        </html>
-      `);
-    } else if (slip.type === "Get Out") {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Get Out Slip</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 20px; background: #ffccff; }
-              .header { text-align: center; margin-bottom: 20px; }
-              .header h2 { margin: 5px 0; }
-              .content { border: 2px solid #000; padding: 15px; }
-              .row { display: flex; margin-bottom: 10px; }
-              .label { width: 150px; font-weight: bold; }
-              .value { flex: 1; border-bottom: 1px solid #000; }
-              .footer { text-align: right; margin-top: 30px; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h3>गेट पास</h3>
-              <h2>BMS COLD STORAGE</h2>
-              <p>(A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)</p>
-              <p>Village - BANA (DHARSIWA) RAIPUR 492099</p>
-              <p>Mob.: 7024566009, 7024066009</p>
-              <p>E-mail: bmscoldstorage@gmail.com</p>
+
+            <div class="row">
+              <div class="label">मार्फत / एजेंट:</div>
+              <div class="value">${slip.place || ""}</div>
             </div>
-            <div class="content">
-              <div class="row">
-                <div class="label">क्र.:</div>
-                <div class="value">${slip.serialNo}</div>
-                <div class="label">दिनांक:</div>
-                <div class="value">${formatSlipDate(slip.date)}</div>
-              </div>
-              <div class="row">
-                <div class="label">पार्टी का नाम:</div>
-                <div class="value">${slip.partyName}</div>
-              </div>
-              <div class="row">
-                <div class="label">स्थान:</div>
-                <div class="value">${slip.placeOut || ''}</div>
-              </div>
 
-              <div class="row">
-                <div class="label">मार्फत / माल प्राप्तकर्ता:</div>
-                <div class="value">${slip.materialReceive || ''}</div>
-              </div>
-
-              <div class="row">
-                <div class="label">जिन्स:</div>
-                <div class="value">${slip.jins || ''}</div>
-              </div>
-
-              <div class="row">
-                <div class="label">माल नंबर / रसीद नं.:</div>
-                <div class="value">${slip.netWeight || ''}</div>
-              </div>
-
-              <div class="row">
-                <div class="label">बोरा:</div>
-                <div class="value">${slip.qtyOut || ''}</div>
-              </div>
-
-              <div class="row">
-                <div class="label">धरमकाँटा वजन:</div>
-                <div class="value">${slip.taadWeight || ''}</div>
-              </div>
-
-              <div class="row">
-                <div class="label">ट्रक नं.:</div>
-                <div class="value">${slip.truckNoOut || ''}</div>
-              </div>
-
-              <div class="row">
-                <div class="label">ड्राइवर:</div>
-                <div class="value">${slip.driverOut || ''}</div>
-              </div>
-
-              <div class="row">
-                <div class="label">रिमार्क्स:</div>
-                <div class="value">${slip.remarksOut || ''}</div>
-              </div>
-          </body>
-        </html>
-      `);
-    } else if (slip.type === "Invoice") {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Invoice</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 20px; }
-              .header { text-align: center; margin-bottom: 20px; border: 2px solid #000; padding: 10px; }
-              .header h2 { margin: 5px 0; }
-              .invoice-label { font-weight: bold; margin-bottom: 10px; }
-              .content { border: 2px solid #000; padding: 15px; }
-              .row { display: flex; margin-bottom: 8px; }
-              .label { width: 200px; font-weight: bold; }
-              .value { flex: 1; border-bottom: 1px solid #000; }
-              table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-              table, th, td { border: 1px solid #000; }
-              th, td { padding: 8px; text-align: left; }
-              .terms { margin-top: 20px; }
-              .signature { margin-top: 40px; text-align: center; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h2>BMS COLD STORAGE</h2>
-              <p>Bana, [Location]</p>
+            <div class="row">
+              <div class="label">जिन्स:</div>
+              <div class="value">${slip.material}</div>
             </div>
-            <div class="invoice-label">INVOICE</div>
-            <div class="content">
-              <div class="row">
-                <div class="label">Invoice No.</div>
-                <div class="value">${slip.invoiceNo}</div>
-              </div>
-              <div class="row">
-                <div class="label">Date</div>
-                <div class="value">${formatSlipDate(slip.date)}</div>
-              </div>
-              <div class="row">
-                <div class="label">Party Name</div>
-                <div class="value">${slip.partyName}</div>
-              </div>
-              <div class="row">
-                <div class="label">Lot Number</div>
-                <div class="value">${slip.lotNumber}</div>
-                <div class="label">Vehicle Number</div>
-                <div class="value">${slip.vehicleNumber}</div>
-              </div>
-              <div class="row">
-                <div class="label">Storage Period: From</div>
-                <div class="value">${formatSlipDate(slip.storageFrom)} <strong>To</strong> ${formatSlipDate(slip.storageTo)}</div>
-              </div>
-              <div class="row">
-                <div class="label">Total Storage Days</div>
-                <div class="value">${slip.totalDays || ''}</div>
-              </div>
-              
-              <table>
-                <thead>
-                  <tr>
-                    <th>Description</th>
-                    <th>Jan (Rate)</th>
-                    <th>Feb (Rate)</th>
-                    <th>Other Months (Rate)</th>
-                    <th>Quantity</th>
-                    <th>Amount (INR)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Storage Charges</td>
-                    <td>${slip.storageCharges || ''}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                  <tr>
-                    <td>Hamali Charges</td>
-                    <td>${slip.hamaliCharges || ''}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                  <tr>
-                    <td>Other Charges</td>
-                    <td>${slip.otherCharges || ''}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                  <tr>
-                    <td><strong>Total Amount</strong></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td><strong>${slip.grandTotal}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-              
-              <div class="row">
-                <div class="label">Grand Total (INR)</div>
-                <div class="value">${slip.grandTotal}</div>
-              </div>
-              <div class="row">
-                <div class="label">Amount in Words</div>
-                <div class="value">${slip.amountInWords || ''}</div>
-              </div>
-              
-              <div class="terms">
-                <strong>Terms & Conditions</strong>
-                <p>Payment should be made within ___ days from the invoice date</p>
-                <p>Late payments will attract interest as per company policy.</p>
-                <p>The company is not responsible for damages due to unforeseen circumstances.</p>
-              </div>
-              
-              <div class="signature">
-                <p><strong>Authorized Signatory</strong></p>
-                <p>(For BMS Cold Storage)</p>
-              </div>
+
+            <div class="row">
+              <div class="label">भरती:</div>
+              <div class="value">${slip.bharti || ""}</div>
             </div>
-          </body>
-        </html>
-      `);
+
+            <div class="row">
+              <div class="label">किल्ला:</div>
+              <div class="value">${slip.killa || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">धरमकाँटा वजन:</div>
+              <div class="value">${slip.dharamKantaWeight || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">ताड़ वजन:</div>
+              <div class="value">${slip.qty} / ${slip.rate}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">ट्रक नं.:</div>
+              <div class="value">${slip.truckNo}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">ड्राइवर:</div>
+              <div class="value">${slip.driver || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">मोबाइल नं.:</div>
+              <div class="value">${slip.mobileNo || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">रिमार्क्स:</div>
+              <div class="value">${slip.remarks || ""}</div>
+            </div>
+
+            <div class="footer-sign">
+              <div>प्रतिनिधि / ड्राइवर</div>
+              <div>प्रबंधक</div>
+            </div>
+
+          </div>
+        </body>
+      </html>
+      `;
     }
-    
-    printWindow.document.close();
-    printWindow.print();
+
+    if (slip.type === "Get Out") {
+      return `
+      <html>
+        <head>
+          <title>Get Out Slip</title>
+          <style>
+            @page {
+              size: A4;
+              margin: 10mm;
+            }
+
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, sans-serif;
+              background: white;
+            }
+
+            .pdf-page {
+              min-height: 100%;
+              padding: 18px 22px;
+              border: 2px solid #000;
+              box-sizing: border-box;
+              background-color: #fde2ee; /* 🌸 PINK */
+            }
+
+            .header {
+              text-align: center;
+              margin-bottom: 12px;
+            }
+
+            .header h2 {
+              margin: 4px 0;
+            }
+
+            .header p {
+              margin: 2px 0;
+              font-size: 13px;
+            }
+
+            .divider {
+              border-top: 2px solid #000;
+              margin: 10px 0 14px;
+            }
+
+            .row {
+              display: flex;
+              margin-bottom: 9px;
+              font-size: 13px;
+            }
+
+            .label {
+              width: 180px;
+              font-weight: bold;
+            }
+
+            .value {
+              flex: 1;
+              border-bottom: 1px solid #000;
+              padding-left: 6px;
+            }
+
+            .footer-sign {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 40px;
+              font-weight: bold;
+              font-size: 13px;
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="pdf-page">
+
+            <div class="header">
+              <strong>गेट पास</strong>
+              <h2>BMS COLD STORAGE</h2>
+              <p>(A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)</p>
+              <p>Village - BANA (DHARSIWA) RAIPUR 492099</p>
+              <p>Mob.: 7024566009, 7024066009</p>
+              <p>E-mail: bmscoldstorage@gmail.com</p>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="row">
+              <div class="label">क्र.:</div>
+              <div class="value">${slip.serialNo}</div>
+              <div class="label">दिनांक:</div>
+              <div class="value">${formatSlipDate(slip.date)}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">पार्टी का नाम:</div>
+              <div class="value">${slip.partyName}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">स्थान:</div>
+              <div class="value">${slip.placeOut || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">मार्फत / माल प्राप्तकर्ता:</div>
+              <div class="value">${slip.materialReceive || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">जिन्स:</div>
+              <div class="value">${slip.jins || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">माल नंबर / रसीद नं.:</div>
+              <div class="value">${slip.netWeight || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">बोरा:</div>
+              <div class="value">${slip.qtyOut || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">धरमकाँटा वजन:</div>
+              <div class="value">${slip.taadWeight || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">ट्रक नं.:</div>
+              <div class="value">${slip.truckNoOut || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">ड्राइवर:</div>
+              <div class="value">${slip.driverOut || ""}</div>
+            </div>
+
+            <div class="row">
+              <div class="label">रिमार्क्स:</div>
+              <div class="value">${slip.remarksOut || ""}</div>
+            </div>
+
+            <div class="footer-sign">
+              <div>प्रतिनिधि / ड्राइवर</div>
+              <div>प्रबंधक</div>
+            </div>
+
+          </div>
+        </body>
+      </html>
+      `;
+    }
+    // Invoice
+    return `
+    <html>
+      <head>
+        <title>Invoice</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 10mm;
+          }
+
+          body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: white;
+          }
+
+          .pdf-page {
+            min-height: 100%;
+            padding: 18px 22px;
+            border: 2px solid #000;
+            box-sizing: border-box;
+            background-color: #ffffff; /* 🤍 WHITE */
+          }
+
+          .header {
+            text-align: center;
+            border: 2px solid #000;
+            padding: 10px;
+            margin-bottom: 14px;
+          }
+
+          .header h2 {
+            margin: 4px 0;
+          }
+
+          .header p {
+            margin: 2px 0;
+            font-size: 13px;
+          }
+
+          .invoice-title {
+            font-weight: bold;
+            font-size: 15px;
+            margin: 10px 0;
+            text-align: left;
+          }
+
+          .row {
+            display: flex;
+            margin-bottom: 8px;
+            font-size: 13px;
+          }
+
+          .label {
+            width: 200px;
+            font-weight: bold;
+          }
+
+          .value {
+            flex: 1;
+            border-bottom: 1px solid #000;
+            padding-left: 6px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 13px;
+          }
+
+          table, th, td {
+            border: 1px solid #000;
+          }
+
+          th, td {
+            padding: 7px;
+            text-align: left;
+          }
+
+          th {
+            background: #f3f3f3;
+          }
+
+          .terms {
+            margin-top: 18px;
+            font-size: 13px;
+          }
+
+          .signature {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+          }
+        </style>
+      </head>
+
+      <body>
+        <div class="pdf-page">
+
+          <div class="header">
+            <h2>BMS COLD STORAGE</h2>
+            <p>(A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)</p>
+            <p>Village - BANA (DHARSIWA) RAIPUR 492099</p>
+            <p>Mob.: 7024566009, 7024066009</p>
+            <p>E-mail: bmscoldstorage@gmail.com</p>
+          </div>
+
+          <div class="invoice-title">INVOICE</div>
+
+          <div class="row">
+            <div class="label">Invoice No.</div>
+            <div class="value">${slip.invoiceNo}</div>
+          </div>
+
+          <div class="row">
+            <div class="label">Date</div>
+            <div class="value">${formatSlipDate(slip.date)}</div>
+          </div>
+
+          <div class="row">
+            <div class="label">Party Name</div>
+            <div class="value">${slip.partyName}</div>
+          </div>
+
+          <div class="row">
+            <div class="label">Lot Number</div>
+            <div class="value">${slip.lotNumber}</div>
+            <div class="label">Vehicle Number</div>
+            <div class="value">${slip.vehicleNumber}</div>
+          </div>
+
+          <div class="row">
+            <div class="label">Storage Period</div>
+            <div class="value">
+              ${formatSlipDate(slip.storageFrom)} &nbsp; <strong>To</strong> &nbsp;
+              ${formatSlipDate(slip.storageTo)}
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="label">Total Storage Days</div>
+            <div class="value">${slip.totalDays || ""}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Jan (Rate)</th>
+                <th>Feb (Rate)</th>
+                <th>Other Months</th>
+                <th>Qty</th>
+                <th>Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Storage Charges</td>
+                <td>${slip.storageCharges || ""}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>Hamali Charges</td>
+                <td>${slip.hamaliCharges || ""}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>Other Charges</td>
+                <td>${slip.otherCharges || ""}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><strong>Total Amount</strong></td>
+                <td colspan="4"></td>
+                <td><strong>${slip.grandTotal}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="row">
+            <div class="label">Grand Total (₹)</div>
+            <div class="value">${slip.grandTotal}</div>
+          </div>
+
+          <div class="row">
+            <div class="label">Amount in Words</div>
+            <div class="value">${slip.amountInWords || ""}</div>
+          </div>
+
+          <div class="terms">
+            <strong>Terms & Conditions</strong>
+            <p>Payment should be made within ___ days from the invoice date.</p>
+            <p>Late payments will attract interest as per company policy.</p>
+            <p>The company is not responsible for damages due to unforeseen circumstances.</p>
+          </div>
+
+          <div class="signature">
+            Authorized Signatory<br/>
+            (For BMS Cold Storage)
+          </div>
+
+        </div>
+      </body>
+    </html>
+    `;
+  }
+
+
+  const getSlipNumber = (slip: Slip): string => {
+    if (slip.type === "Invoice") {
+      return (slip as InvoiceSlip).invoiceNo;
+    }
+    return (slip as GetInSlip | GetOutSlip).serialNo;
+  };
+
+  // ------------------------------
+  // Convert Blob to Base64
+  // ------------------------------
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+
+        // 🔥 IMPORTANT: Remove data:application/pdf;base64,
+        const base64 = result.split(",")[1];
+
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  // ------------------------------
+  // Upload PDF to Google Drive
+  // ------------------------------
+  const uploadPdfToDrive = async (
+    pdfBlob: Blob,
+    fileName: string
+  ): Promise<{ url: string | null; alreadyExists: boolean }> => {
+    try {
+      const base64Data = await blobToBase64(pdfBlob);
+
+      const formData = new FormData();
+      formData.append("action", "handleFileUpload");
+      formData.append("base64Data", base64Data);
+      formData.append("fileName", fileName);
+      formData.append("mimeType", "application/pdf");
+      formData.append("folderId", DRIVE_FOLDER_ID);
+
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: formData,
+      });
+
+      // 🔥 IMPORTANT: parse ONLY ONCE
+      const text = await res.text();
+      const data = JSON.parse(text);
+
+      if (!data.success) {
+        console.error("Drive upload failed:", data.error);
+        return { url: null, alreadyExists: false };
+      }
+
+      return {
+        url: data.fileUrl,
+        alreadyExists: data.alreadyExists || false,
+      };
+    } catch (err) {
+      console.error("PDF upload error:", err);
+      return { url: null, alreadyExists: false };
+    }
+  };
+
+  const generateAndStorePdf = async (slip: Slip) => {
+    const slipNumber = getSlipNumber(slip);
+    const fileName = `${slip.type}_${slipNumber}.pdf`;
+
+    const html = getSlipHTML(slip);
+
+    const pdfBlob = await html2pdf()
+      .from(html)
+      .set({
+        margin: 5,
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: "mm", format: "a4" },
+      })
+      .outputPdf("blob");
+
+    const { url } = await uploadPdfToDrive(pdfBlob, fileName);
+    if (!url) throw new Error("PDF upload failed");
+
+    return url;
+  };
+
+  const printSlip = async (slip: Slip) => {
+    if (printingSlipId === slip.id) return;
+
+    const pdfWindow = window.open("", "_blank");
+
+    if (!pdfWindow) {
+      alert("Popup blocked. Please allow popups.");
+      return;
+    }
+
+    // 🌈 Smooth loader UI
+    pdfWindow.document.write(`
+      <html>
+        <head>
+          <title>Opening PDF...</title>
+          <style>
+            body {
+              margin: 0;
+              height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              background: #f9fafb;
+              font-family: Arial, sans-serif;
+              opacity: 0;
+              animation: fadeIn 0.4s ease forwards;
+            }
+            .container {
+              text-align: center;
+              transform: scale(0.96);
+              animation: scaleIn 0.4s ease forwards;
+            }
+            .spinner {
+              width: 46px;
+              height: 46px;
+              border: 4px solid #d1d5db;
+              border-top: 4px solid #1e40af;
+              border-radius: 50%;
+              animation: spin 1s linear infinite;
+              margin: 0 auto 14px;
+            }
+            .text {
+              font-size: 14px;
+              color: #374151;
+              letter-spacing: 0.2px;
+            }
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+            @keyframes fadeIn {
+              to { opacity: 1; }
+            }
+            @keyframes scaleIn {
+              to { transform: scale(1); }
+            }
+            .fadeOut {
+              animation: fadeOut 0.25s ease forwards;
+            }
+            @keyframes fadeOut {
+              to { opacity: 0; }
+            }
+          </style>
+        </head>
+        <body id="body">
+          <div class="container">
+            <div class="spinner"></div>
+            <div class="text">Opening PDF, please wait…</div>
+          </div>
+        </body>
+      </html>
+    `);
+
+    try {
+      setTimeout(() => {
+        setPrintingSlipId(slip.id);
+      }, 0);
+
+      let pdfUrl = slip.pdfUrl;
+      if (!pdfUrl) {
+        pdfUrl = await generateAndStorePdf(slip);
+
+        setSlips(prev =>
+          prev.map(s =>
+            s.id === slip.id ? { ...s, pdfUrl } : s
+          )
+        );
+      }
+
+      // ✨ Smooth fade-out before redirect
+      pdfWindow.document.getElementById("body")?.classList.add("fadeOut");
+
+      setTimeout(() => {
+        pdfWindow.location.replace(pdfUrl);
+      }, 220); // small delay for smoothness
+    } catch (err) {
+      console.error(err);
+      pdfWindow.document.body.innerHTML = `
+        <p style="font-family:Arial;color:red;text-align:center;margin-top:40px;">
+          Failed to open PDF. Please try again.
+        </p>
+      `;
+    } finally {
+      // 🧠 Delay unlock to avoid UI jitter
+      setTimeout(() => {
+        setPrintingSlipId(null);
+      }, 300);
+    }
   };
 
   const filteredSlips = slips.filter(slip => {
@@ -751,7 +1369,7 @@ const SlipManagement = () => {
       <div className="flex-shrink-0 px-2 md:px-6 bg-white border-b border-gray-200 overflow-x-auto">
         <div className="flex gap-1 md:gap-2 min-w-max">
           <button
-            onClick={() => setActiveTab("getIn")}
+            onClick={() => printingSlipId === null && setActiveTab("getIn")}
             className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === "getIn"
                 ? "border-red-800 text-red-800"
@@ -761,7 +1379,7 @@ const SlipManagement = () => {
             Get In
           </button>
           <button
-            onClick={() => setActiveTab("getOut")}
+            onClick={() => printingSlipId === null && setActiveTab("getOut")}
             className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === "getOut"
                 ? "border-red-800 text-red-800"
@@ -771,7 +1389,7 @@ const SlipManagement = () => {
             Get Out
           </button>
           <button
-            onClick={() => setActiveTab("invoice")}
+            onClick={() => printingSlipId === null && setActiveTab("invoice")}
             className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === "invoice"
                 ? "border-red-800 text-red-800"
@@ -781,7 +1399,7 @@ const SlipManagement = () => {
             Invoice
           </button>
           <button
-            onClick={() => setActiveTab("history")}
+            onClick={() => printingSlipId === null && setActiveTab("history")}
             className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
               activeTab === "history"
                 ? "border-red-800 text-red-800"
@@ -820,7 +1438,7 @@ const SlipManagement = () => {
                         type="text"
                         value={getInForm.serialNo}
                         onChange={(e) => setGetInForm({...getInForm, serialNo: e.target.value})}
-                        required
+                        // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
                     </div>
@@ -832,7 +1450,7 @@ const SlipManagement = () => {
                         type="date"
                         value={getInForm.date}
                         onChange={(e) => setGetInForm({...getInForm, date: e.target.value})}
-                        required
+                        // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
                     </div>
@@ -846,7 +1464,7 @@ const SlipManagement = () => {
                     type="text"
                     value={getInForm.partyName}
                     onChange={(e) => setGetInForm({...getInForm, partyName: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -869,7 +1487,7 @@ const SlipManagement = () => {
                     type="text"
                     value={getInForm.material}
                     onChange={(e) => setGetInForm({...getInForm, material: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -917,7 +1535,7 @@ const SlipManagement = () => {
                       type="text"
                       value={getInForm.qty}
                       onChange={(e) => setGetInForm({...getInForm, qty: e.target.value})}
-                      required
+                      // required
                       placeholder="Qty"
                       className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                     />
@@ -938,7 +1556,7 @@ const SlipManagement = () => {
                     type="text"
                     value={getInForm.truckNo}
                     onChange={(e) => setGetInForm({...getInForm, truckNo: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1018,7 +1636,7 @@ const SlipManagement = () => {
                         type="text"
                         value={getOutForm.serialNo}
                         onChange={(e) => setGetOutForm({...getOutForm, serialNo: e.target.value})}
-                        required
+                        // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
                     </div>
@@ -1030,7 +1648,7 @@ const SlipManagement = () => {
                         type="date"
                         value={getOutForm.date}
                         onChange={(e) => setGetOutForm({...getOutForm, date: e.target.value})}
-                        required
+                        // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
                     </div>
@@ -1044,7 +1662,7 @@ const SlipManagement = () => {
                     type="text"
                     value={getOutForm.partyName}
                     onChange={(e) => setGetOutForm({...getOutForm, partyName: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1078,7 +1696,7 @@ const SlipManagement = () => {
                     type="text"
                     value={getOutForm.jins}
                     onChange={(e) => setGetOutForm({...getOutForm, jins: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1123,7 +1741,7 @@ const SlipManagement = () => {
                     type="text"
                     value={getOutForm.truckNo}
                     onChange={(e) => setGetOutForm({...getOutForm, truckNo: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1188,7 +1806,7 @@ const SlipManagement = () => {
                     type="text"
                     value={invoiceForm.invoiceNo}
                     onChange={(e) => setInvoiceForm({...invoiceForm, invoiceNo: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1200,7 +1818,7 @@ const SlipManagement = () => {
                     type="date"
                     value={invoiceForm.date}
                     onChange={(e) => setInvoiceForm({...invoiceForm, date: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1212,7 +1830,7 @@ const SlipManagement = () => {
                     type="text"
                     value={invoiceForm.partyName}
                     onChange={(e) => setInvoiceForm({...invoiceForm, partyName: e.target.value})}
-                    required
+                    // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1456,10 +2074,24 @@ const SlipManagement = () => {
                           <div className="flex gap-2">
                             <button
                               onClick={() => printSlip(slip)}
-                              className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                              disabled={printingSlipId === slip.id}
+                              className={`flex items-center gap-2 text-sm font-medium ${
+                                printingSlipId === slip.id
+                                  ? "text-gray-400 cursor-not-allowed"
+                                  : "text-blue-600 hover:text-blue-800"
+                              }`}
                             >
-                              <Printer size={16} />
-                              <span className="hidden md:inline">Print</span>
+                              {printingSlipId === slip.id ? (
+                                <>
+                                  <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span>
+                                  <span>Opening...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Printer size={16} />
+                                  <span className="hidden md:inline">Print</span>
+                                </>
+                              )}
                             </button>
                           </div>
                         </td>
