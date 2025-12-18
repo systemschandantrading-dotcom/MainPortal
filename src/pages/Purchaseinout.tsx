@@ -1100,7 +1100,7 @@ const PurchaseInOut: React.FC = () => {
 
             {/* Table Section */}
             <div className="flex-1 overflow-hidden px-4 lg:px-6 pb-4 lg:pb-6 pt-2 lg:pt-4">
-              <div className="h-full bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="h-[calc(100vh-260px)] bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col">
                 {/* Desktop Table */}
                 <div className="hidden lg:block flex-1 overflow-y-auto">
                   <table className="w-full min-w-max">

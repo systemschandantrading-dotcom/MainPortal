@@ -215,58 +215,57 @@ const SlipManagement = () => {
   };
 
   const fetchSlips = async () => {
-    setLoadingSlips(true);   // start loading
+    setLoadingSlips(true);
     try {
       const res = await fetch(`${SCRIPT_URL}?action=getAllSlips`);
       const data = await res.json();
 
-      if (data.success) {
-        const cleaned = data.slips.slice(1); // 🔥 header remove
-        const formatted = cleaned.map((s: any, index: number) => ({
+      if (data.success && Array.isArray(data.slips)) {
+        const formatted = data.slips.map((s: any, index: number) => ({
           id: index + 1,
-          type: s.slipType,
-          serialNo: s.slipNo,
-          invoiceNo: s.slipNo,
-          date: s.date,
-          partyName: s.partyName,
+          type: s.slipType,                 // 🔥 VERY IMPORTANT
+          serialNo: s.slipNo || "",
+          invoiceNo: s.slipNo || "",
+          date: s.date || "",
+          partyName: s.partyName || "",
 
           // GET IN
-          place: s.place,
-          material: s.material,
-          bharti: s.bharti,
-          killa: s.killa,
-          dharamKantaWeight: s.dharamKantaWeight,
-          qty: s.qty,
-          rate: s.rate,
-          truckNo: s.truckNo,
-          driver: s.driver,
-          mobileNo: s.mobileNo,
-          remarks: s.remarks,
+          place: s.place || "",
+          material: s.material || "",
+          bharti: s.bharti || "",
+          killa: s.killa || "",
+          dharamKantaWeight: s.dharamKantaWeight || "",
+          qty: s.qty || "",
+          rate: s.rate || "",
+          truckNo: s.truckNo || "",
+          driver: s.driver || "",
+          mobileNo: s.mobileNo || "",
+          remarks: s.remarks || "",
 
           // GET OUT
-          placeOut: s.placeOut,
-          materialReceive: s.materialReceive,
-          jins: s.jins,
-          netWeight: s.netWeight,
-          qtyOut: s.qtyOut,
-          taadWeight: s.taadWeight,
-          truckNoOut: s.truckNoOut,
-          driverOut: s.driverOut,
-          remarksOut: s.remarksOut,
+          placeOut: s.placeOut || "",
+          materialReceive: s.materialReceive || "",
+          jins: s.jins || "",
+          netWeight: s.netWeight || "",
+          qtyOut: s.qtyOut || "",
+          taadWeight: s.taadWeight || "",
+          truckNoOut: s.truckNoOut || "",
+          driverOut: s.driverOut || "",
+          remarksOut: s.remarksOut || "",
 
           // INVOICE
-          lotNumber: s.lotNumber,
-          vehicleNumber: s.vehicleNumber,
-          storageFrom: s.storageFrom,
-          storageTo: s.storageTo,
-          totalDays: s.totalDays,
-          storageCharges: s.storageCharges,
-          hamaliCharges: s.hamaliCharges,
-          otherCharges: s.otherCharges,
-          grandTotal: s.grandTotal,
-          amountInWords: s.amountInWords,
+          lotNumber: s.lotNumber || "",
+          vehicleNumber: s.vehicleNumber || "",
+          storageFrom: s.storageFrom || "",
+          storageTo: s.storageTo || "",
+          totalDays: s.totalDays || "",
+          storageCharges: s.storageCharges || "",
+          hamaliCharges: s.hamaliCharges || "",
+          otherCharges: s.otherCharges || "",
+          grandTotal: s.grandTotal || "",
+          amountInWords: s.amountInWords || "",
 
-          createdAt: s.timestamp,
+          createdAt: s.timestamp || "",
           pdfUrl: s.pdfUrl || "",
         }));
 
@@ -275,7 +274,7 @@ const SlipManagement = () => {
     } catch (err) {
       console.error("Error loading slips:", err);
     } finally {
-      setLoadingSlips(false); // stop loader
+      setLoadingSlips(false);
     }
   };
   useEffect(() => {
@@ -611,11 +610,11 @@ const SlipManagement = () => {
     return `${day}/${month}/${year}`;
   };
 
-  const getPdfBgClass = (type: Slip["type"]) => {
-    if (type === "Get In") return "bg-get-in";
-    if (type === "Get Out") return "bg-get-out";
-    return "bg-invoice";
-  };
+  // const getPdfBgClass = (type: Slip["type"]) => {
+  //   if (type === "Get In") return "bg-get-in";
+  //   if (type === "Get Out") return "bg-get-out";
+  //   return "bg-invoice";
+  // };
 
   const getSlipHTML = (slip: Slip) => {
     if (slip.type === "Get In") {
