@@ -352,29 +352,41 @@ const PurchaseInOut: React.FC = () => {
       const data = await response.json();
 
       if (data.success && Array.isArray(data.purchases)) {
-        const mappedData: Purchase[] = data.purchases.map((item: any, index: number) => ({
-          id: index + 1,
-          serialNo: item.serialNo || "",
-          slipNo: item.slipNo || "",
-          status: item.status || "",
-          date: item.date ? new Date(item.date).toLocaleDateString("en-GB") : "",
-          time: item.time ? new Date(item.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "",
-          partyName: item.partyName || "",
-          material: item.material || "",
-          qty: item.qty || "",
-          inWord: item.inWord || "",
-          taadWeight: item.taadWeight || "",
-          vehicleNo: item.vehicleNo || "",
-          // Map lotNo from array/string to a single string (for display compatibility)
-          lotNo: item.lotNo || "",
-          location: item.location || "",
-          bag: item.bag || "",
-          weight: item.weight || "",
-          aadhaarImage: null, // Assuming image link is not directly in list
-        }));
+        const mappedData: Purchase[] = data.purchases.map(
+          (item: any, index: number) => ({
+            id: index + 1,
+            serialNo: item.serialNo || "",
+            slipNo: item.slipNo || "",
+            status: item.status || "",
+            date: item.date
+              ? new Date(item.date).toLocaleDateString("en-GB")
+              : "",
+            time: item.time
+              ? new Date(item.time).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "",
+            partyName: item.partyName || "",
+            material: item.material || "",
+            qty: item.qty || "",
+            inWord: item.inWord || "",
+            taadWeight: item.taadWeight || "",
+            vehicleNo: item.vehicleNo || "",
+            // Map lotNo from array/string to a single string (for display compatibility)
+            lotNo: item.lotNo || "",
+            location: item.location || "",
+            bag: item.bag || "",
+            weight: item.weight || "",
+            aadhaarImage: null, // Assuming image link is not directly in list
+          })
+        );
 
-        setPurchases(mappedData);
-        setFilteredPurchases(mappedData);
+        // 🔥 Reverse so latest entry appears first
+        const reversedData = [...mappedData].reverse();
+
+        setPurchases(reversedData);
+        setFilteredPurchases(reversedData);
       }
     } catch (err) {
       console.error("Failed to fetch purchases:", err);
@@ -675,7 +687,7 @@ const PurchaseInOut: React.FC = () => {
         }, [masterData.locations, dropdownSearch.location]);
 
         return (
-          <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+          <div className="bg-gray-50 flex flex-col flex-1">
             {/* Stats Cards */}
             <div className="flex-shrink-0 p-4 lg:p-6 bg-gray-50">
               <div className="max-w-full mx-auto">
@@ -1099,8 +1111,8 @@ const PurchaseInOut: React.FC = () => {
             </div>
 
             {/* Table Section */}
-            <div className="flex-1 overflow-hidden px-4 lg:px-6 pb-4 lg:pb-6 pt-2 lg:pt-4">
-              <div className="h-[calc(100vh-260px)] bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="px-4 lg:px-6 pb-4 lg:pb-6 pt-2 lg:pt-4 h-[75vh]">
+              <div className="h-full bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col">
                 {/* Desktop Table */}
                 <div className="hidden lg:block flex-1 overflow-y-auto">
                   <table className="w-full min-w-max">

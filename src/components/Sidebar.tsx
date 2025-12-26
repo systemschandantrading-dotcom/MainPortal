@@ -50,10 +50,10 @@ const routeConfig = {
     defaultRole: 'user' // Available to all users by default
   },
   'slip': {
-    path: '/',
+    path: '/slip',
     label: 'Slip',
     icon: FileText,
-    defaultRole: 'user' // Available to all users by default
+    defaultRole: 'user'
   },
   'pete': {
     path: '/pete',

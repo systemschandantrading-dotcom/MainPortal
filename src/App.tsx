@@ -32,7 +32,25 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Slip />} />
+          <Route index element={<Navigate to="/purchase" replace />} />
+          {/* PURCHASE */}
+          <Route
+            path="purchase"
+            element={
+              <ProtectedRoute requiredPage="purchase">
+                <Purchase />
+              </ProtectedRoute>
+            }
+          />
+          {/* SLIP (NEW & IMPORTANT) */}
+          <Route
+            path="slip"
+            element={
+              <ProtectedRoute requiredPage="slip">
+                <Slip />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Admin only routes */}
           <Route

@@ -1,6 +1,6 @@
 // SLIP REACT
 import { useState, useEffect } from "react";
-import { Printer } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import html2pdf from "html2pdf.js";
 
 const SCRIPT_URL = import.meta.env.VITE_APP_SCRIPT_URL;
@@ -44,9 +44,24 @@ interface SlipPayload {
   totalDays: string;
   storageCharges: string;
   hamaliCharges: string;
+  offSeasonCharges: string;
   otherCharges: string;
   grandTotal: string;
   amountInWords: string;
+  // ⭐ INVOICE EXTRA (SHEET KE LIYE)
+  storageOtherMonthRate?: string;
+  storageQty?: string;
+
+  offSeasonJanRate?: string;
+  offSeasonFebRate?: string;
+  offSeasonOtherMonthRate?: string;
+  offSeasonQty?: string;
+
+  hamaliOtherMonthRate?: string;
+  hamaliQty?: string;
+  totalAmount?: string;
+  otherChargesOtherMonthRate?: string;
+  otherChargesQty?: string;
 
   // ⭐ IMPORTANT
   pdfUrl?: string;
@@ -107,24 +122,169 @@ interface InvoiceSlip {
   storageFrom: string;
   storageTo: string;
   totalDays: string;
+
+  // 🔹 RATES
+  storageOtherMonthRate?: string;
+  offSeasonJanRate?: string;
+  offSeasonFebRate?: string;
+  offSeasonOtherMonthRate?: string;
+  hamaliOtherMonthRate?: string;
+  otherChargesOtherMonthRate?: string;
+
+  // 🔹 QTY
+  storageQty?: string;
+  offSeasonQty?: string;
+  hamaliQty?: string;
+  otherChargesQty?: string;
+
+  // 🔹 AMOUNTS
   storageCharges: string;
+  offSeasonCharges: string;
   hamaliCharges: string;
   otherCharges: string;
   grandTotal: string;
   amountInWords: string;
+
   createdAt: string;
 }
 
 type Slip = (GetInSlip | GetOutSlip | InvoiceSlip) & {
   pdfUrl?: string;
+
+  autoSerial?: string;
 };
 
 const SlipManagement = () => {
-  const [loadingSlips, setLoadingSlips] = useState(true);   // history loading
-  const [saving, setSaving] = useState(false);              // save buttons loading
+  const tableInputClass =
+    "w-full bg-transparent border-0 border-b border-black px-1 py-0.5 text-xs md:text-sm text-center focus:outline-none focus:border-b-2 focus:border-black";
+  const [loadingSlips, setLoadingSlips] = useState(true); // history loading
+  const [saving, setSaving] = useState(false); // save buttons loading
   const [activeTab, setActiveTab] = useState("getIn");
+  // 🔍 Search state (History filter)
+  const [searchQuery, setSearchQuery] = useState("");
+  // 🔽 Slip Type Filter (History)
+  const [slipTypeFilter, setSlipTypeFilter] = useState("all");
+  // 📅 Date Filter (History)
+  const [filterDate, setFilterDate] = useState("");
   const [slips, setSlips] = useState<Slip[]>([]);
   const [printingSlipId, setPrintingSlipId] = useState<number | null>(null);
+
+  // ✅ Calculate Off Season Other Month Rate (Jan + Feb)
+  const getOffSeasonOtherMonthRate = () => {
+    const jan = Number(invoiceForm.offSeasonJanRate) || 0;
+    const feb = Number(invoiceForm.offSeasonFebRate) || 0;
+    return jan + feb;
+  };
+
+  // 🔢 Safe number parser
+  const toNumber = (val: string) => Number(val) || 0;
+
+  // 🔹 Row-wise amount calculators
+  const getStorageAmount = () =>
+    toNumber(invoiceForm.storageOtherMonthRate) *
+    toNumber(invoiceForm.storageQty);
+
+  const getHamaliAmount = () =>
+    toNumber(invoiceForm.hamaliOtherMonthRate) *
+    toNumber(invoiceForm.hamaliQty);
+
+  const getOffSeasonAmount = () =>
+    getOffSeasonOtherMonthRate() * toNumber(invoiceForm.offSeasonQty);
+
+  const getOtherChargesAmount = () =>
+    toNumber(invoiceForm.otherChargesOtherMonthRate) *
+    toNumber(invoiceForm.otherChargesQty);
+
+  // 🔤 Number to Words (Indian / English style)
+  const numberToWords = (num: number): string => {
+    if (num === 0) return "Zero Only";
+
+    const ones = [
+      "",
+      "One",
+      "Two",
+      "Three",
+      "Four",
+      "Five",
+      "Six",
+      "Seven",
+      "Eight",
+      "Nine",
+      "Ten",
+      "Eleven",
+      "Twelve",
+      "Thirteen",
+      "Fourteen",
+      "Fifteen",
+      "Sixteen",
+      "Seventeen",
+      "Eighteen",
+      "Nineteen",
+    ];
+
+    const tens = [
+      "",
+      "",
+      "Twenty",
+      "Thirty",
+      "Forty",
+      "Fifty",
+      "Sixty",
+      "Seventy",
+      "Eighty",
+      "Ninety",
+    ];
+
+    const convertBelowThousand = (n: number): string => {
+      let str = "";
+
+      if (n >= 100) {
+        str += ones[Math.floor(n / 100)] + " Hundred ";
+        n %= 100;
+      }
+
+      if (n >= 20) {
+        str += tens[Math.floor(n / 10)] + " ";
+        n %= 10;
+      }
+
+      if (n > 0) {
+        str += ones[n] + " ";
+      }
+
+      return str.trim();
+    };
+
+    let result = "";
+    let crore = Math.floor(num / 10000000);
+    num %= 10000000;
+
+    let lakh = Math.floor(num / 100000);
+    num %= 100000;
+
+    let thousand = Math.floor(num / 1000);
+    num %= 1000;
+
+    if (crore) result += convertBelowThousand(crore) + " Crore ";
+    if (lakh) result += convertBelowThousand(lakh) + " Lakh ";
+    if (thousand) result += convertBelowThousand(thousand) + " Thousand ";
+    if (num) result += convertBelowThousand(num);
+
+    return result.trim() + " Only";
+  };
+  const getAmountInWords = () => {
+    const total = getGrandTotal();
+    return total ? numberToWords(total) : "";
+  };
+
+  const getGrandTotal = () => {
+    return (
+      getStorageAmount() +
+      getHamaliAmount() +
+      getOffSeasonAmount() +
+      getOtherChargesAmount()
+    );
+  };
 
   // Get In Form State
   const [getInForm, setGetInForm] = useState({
@@ -147,7 +307,7 @@ const SlipManagement = () => {
   // Get Out Form State
   const [getOutForm, setGetOutForm] = useState({
     serialNo: "",
-    date: new Date().toISOString().split('T')[0],
+    date: new Date().toISOString().split("T")[0],
     partyName: "",
     place: "",
     materialReceive: "",
@@ -163,19 +323,66 @@ const SlipManagement = () => {
   // Invoice Form State
   const [invoiceForm, setInvoiceForm] = useState({
     invoiceNo: "",
-    date: new Date().toISOString().split('T')[0],
+    date: new Date().toISOString().split("T")[0],
     partyName: "",
     lotNumber: "",
     vehicleNumber: "",
     storageFrom: "",
     storageTo: "",
     totalDays: "",
+
+    // 🔹 Rates
+    offSeasonJanRate: "",
+    offSeasonFebRate: "",
+
+    storageOtherMonthRate: "",
+    hamaliOtherMonthRate: "",
+    offSeasonOtherMonthRate: "",
+    otherChargesOtherMonthRate: "",
+
+    // 🔹 Quantity
+    storageQty: "",
+    hamaliQty: "",
+    offSeasonQty: "",
+    otherChargesQty: "",
+
+    // 🔹 Totals
     storageCharges: "",
     hamaliCharges: "",
+    offSeasonCharges: "",
     otherCharges: "",
     grandTotal: "",
     amountInWords: "",
   });
+
+  useEffect(() => {
+    const storage = getStorageAmount();
+    const hamali = getHamaliAmount();
+    const offSeason = getOffSeasonAmount();
+    const other = getOtherChargesAmount();
+
+    const total = storage + hamali + offSeason + other;
+
+    setInvoiceForm((prev) => ({
+      ...prev,
+      storageCharges: String(storage),
+      hamaliCharges: String(hamali),
+      offSeasonCharges: String(offSeason),
+      otherCharges: String(other),
+      grandTotal: String(total),
+      amountInWords: total ? numberToWords(total) : "",
+    }));
+  }, [
+    invoiceForm.storageOtherMonthRate,
+    invoiceForm.storageQty,
+    invoiceForm.hamaliOtherMonthRate,
+    invoiceForm.hamaliQty,
+    invoiceForm.offSeasonJanRate,
+    invoiceForm.offSeasonFebRate,
+    invoiceForm.offSeasonQty,
+    invoiceForm.otherChargesOtherMonthRate,
+    invoiceForm.otherChargesQty,
+  ]);
 
   const saveSlipToSheet = async (payload: any) => {
     try {
@@ -223,7 +430,8 @@ const SlipManagement = () => {
       if (data.success && Array.isArray(data.slips)) {
         const formatted = data.slips.map((s: any, index: number) => ({
           id: index + 1,
-          type: s.slipType,                 // 🔥 VERY IMPORTANT
+          type: s.slipType, // 🔥 VERY IMPORTANT
+          autoSerial: s.serialNo || "",
           serialNo: s.slipNo || "",
           invoiceNo: s.slipNo || "",
           date: s.date || "",
@@ -261,9 +469,24 @@ const SlipManagement = () => {
           totalDays: s.totalDays || "",
           storageCharges: s.storageCharges || "",
           hamaliCharges: s.hamaliCharges || "",
+          offSeasonCharges: s.offSeasonCharges || "",
           otherCharges: s.otherCharges || "",
           grandTotal: s.grandTotal || "",
-          amountInWords: s.amountInWords || "",
+          amountInWords: s.amontInWords || "",
+
+          // 🔹 INVOICE – RATES
+          storageOtherMonthRate: s.storageOtherMonthRate || "",
+          offSeasonJanRate: s.offSeasonJanRate || "",
+          offSeasonFebRate: s.offSeasonFebRate || "",
+          offSeasonOtherMonthRate: s.offSeasonOtherMonthRate || "",
+          hamaliOtherMonthRate: s.hamaliOtherMonthRate || "",
+          otherChargesOtherMonthRate: s.otherChargesOtherMonthRate || "",
+
+          // 🔹 INVOICE – QTY
+          storageQty: s.storageQty || "",
+          offSeasonQty: s.offSeasonQty || "",
+          hamaliQty: s.hamaliQty || "",
+          otherChargesQty: s.otherChargesQty || "",
 
           createdAt: s.timestamp || "",
           pdfUrl: s.pdfUrl || "",
@@ -282,104 +505,105 @@ const SlipManagement = () => {
   }, []);
 
   const handleGetOutSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setSaving(true);
+    e.preventDefault();
+    setSaving(true);
 
-  try {
-    // 🔹 Payload
-    const payload: SlipPayload = {
-      slipType: "Get Out",
-      slipNo: getOutForm.serialNo,
-      date: getOutForm.date,
-      partyName: getOutForm.partyName,
+    try {
+      // 🔹 Payload
+      const payload: SlipPayload = {
+        slipType: "Get Out",
+        slipNo: getOutForm.serialNo,
+        date: getOutForm.date,
+        partyName: getOutForm.partyName,
 
-      // GET IN EMPTY
-      place: "",
-      material: "",
-      bharti: "",
-      killa: "",
-      dharamKantaWeight: "",
-      qty: "",
-      rate: "",
-      truckNo: "",
-      driver: "",
-      mobileNo: "",
-      remarks: "",
+        // GET IN EMPTY
+        place: "",
+        material: "",
+        bharti: "",
+        killa: "",
+        dharamKantaWeight: "",
+        qty: "",
+        rate: "",
+        truckNo: "",
+        driver: "",
+        mobileNo: "",
+        remarks: "",
 
-      // GET OUT
-      placeOut: getOutForm.place,
-      materialReceive: getOutForm.materialReceive,
-      jins: getOutForm.jins,
-      netWeight: getOutForm.netWeight,
-      qtyOut: getOutForm.qty,
-      taadWeight: getOutForm.taadWeight,
-      truckNoOut: getOutForm.truckNo,
-      driverOut: getOutForm.driver,
-      remarksOut: getOutForm.remarks,
+        // GET OUT
+        placeOut: getOutForm.place,
+        materialReceive: getOutForm.materialReceive,
+        jins: getOutForm.jins,
+        netWeight: getOutForm.netWeight,
+        qtyOut: getOutForm.qty,
+        taadWeight: getOutForm.taadWeight,
+        truckNoOut: getOutForm.truckNo,
+        driverOut: getOutForm.driver,
+        remarksOut: getOutForm.remarks,
 
-      // INVOICE EMPTY
-      lotNumber: "",
-      vehicleNumber: "",
-      storageFrom: "",
-      storageTo: "",
-      totalDays: "",
-      storageCharges: "",
-      hamaliCharges: "",
-      otherCharges: "",
-      grandTotal: "",
-      amountInWords: "",
-    };
+        // INVOICE EMPTY
+        lotNumber: "",
+        vehicleNumber: "",
+        storageFrom: "",
+        storageTo: "",
+        totalDays: "",
+        storageCharges: "",
+        hamaliCharges: "",
+        offSeasonCharges: "",
+        otherCharges: "",
+        grandTotal: "",
+        amountInWords: "",
+      };
 
-    // 🔹 Slip for PDF
-    const slipForPdf: GetOutSlip = {
-      id: 0,
-      type: "Get Out",
-      serialNo: getOutForm.serialNo,
-      date: getOutForm.date,
-      partyName: getOutForm.partyName,
-      placeOut: getOutForm.place,
-      materialReceive: getOutForm.materialReceive,
-      jins: getOutForm.jins,
-      netWeight: getOutForm.netWeight,
-      qtyOut: getOutForm.qty,
-      taadWeight: getOutForm.taadWeight,
-      truckNoOut: getOutForm.truckNo,
-      driverOut: getOutForm.driver,
-      remarksOut: getOutForm.remarks,
-      createdAt: "",
-    };
+      // 🔹 Slip for PDF
+      const slipForPdf: GetOutSlip = {
+        id: 0,
+        type: "Get Out",
+        serialNo: getOutForm.serialNo,
+        date: getOutForm.date,
+        partyName: getOutForm.partyName,
+        placeOut: getOutForm.place,
+        materialReceive: getOutForm.materialReceive,
+        jins: getOutForm.jins,
+        netWeight: getOutForm.netWeight,
+        qtyOut: getOutForm.qty,
+        taadWeight: getOutForm.taadWeight,
+        truckNoOut: getOutForm.truckNo,
+        driverOut: getOutForm.driver,
+        remarksOut: getOutForm.remarks,
+        createdAt: "",
+      };
 
-    // 🔹 Generate PDF FIRST
-    const pdfUrl = await generateAndStorePdf(slipForPdf);
-    payload.pdfUrl = pdfUrl;
+      // 🔹 Generate PDF FIRST
+      const pdfUrl = await generateAndStorePdf(slipForPdf);
+      payload.pdfUrl = pdfUrl;
 
-    // 🔹 Save ONCE
-    const saved = await saveSlipToSheet(payload);
-    if (!saved) return;
+      // 🔹 Save ONCE
+      const saved = await saveSlipToSheet(payload);
+      if (!saved) return;
 
-    await fetchSlips();
+      await fetchSlips();
 
-    // ✅ RESET GET OUT FORM
-    setGetOutForm({
-      serialNo: "",
-      date: new Date().toISOString().split("T")[0],
-      partyName: "",
-      place: "",
-      materialReceive: "",
-      jins: "",
-      netWeight: "",
-      qty: "",
-      taadWeight: "",
-      truckNo: "",
-      driver: "",
-      remarks: "",
-    });
+      // ✅ RESET GET OUT FORM
+      setGetOutForm({
+        serialNo: "",
+        date: new Date().toISOString().split("T")[0],
+        partyName: "",
+        place: "",
+        materialReceive: "",
+        jins: "",
+        netWeight: "",
+        qty: "",
+        taadWeight: "",
+        truckNo: "",
+        driver: "",
+        remarks: "",
+      });
 
-    alert("Get Out slip saved & PDF generated!");
-  } finally {
-    setSaving(false);
-  }
-};
+      alert("Get Out slip saved & PDF generated!");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // ⭐ ADD THIS FUNCTION
   const handleGetInSubmit = async (e: React.FormEvent) => {
@@ -424,6 +648,7 @@ const SlipManagement = () => {
         totalDays: "",
         storageCharges: "",
         hamaliCharges: "",
+        offSeasonCharges: "",
         otherCharges: "",
         grandTotal: "",
         amountInWords: "",
@@ -517,16 +742,39 @@ const SlipManagement = () => {
         remarksOut: "",
 
         // INVOICE DATA
+        // INVOICE DATA
         lotNumber: invoiceForm.lotNumber,
         vehicleNumber: invoiceForm.vehicleNumber,
         storageFrom: invoiceForm.storageFrom,
         storageTo: invoiceForm.storageTo,
         totalDays: invoiceForm.totalDays,
-        storageCharges: invoiceForm.storageCharges,
-        hamaliCharges: invoiceForm.hamaliCharges,
-        otherCharges: invoiceForm.otherCharges,
-        grandTotal: invoiceForm.grandTotal,
-        amountInWords: invoiceForm.amountInWords,
+
+        // ✅ STORAGE
+        storageOtherMonthRate: invoiceForm.storageOtherMonthRate,
+        storageQty: invoiceForm.storageQty,
+        storageCharges: String(getStorageAmount()),
+
+        // ✅ OFF SEASON
+        offSeasonJanRate: invoiceForm.offSeasonJanRate,
+        offSeasonFebRate: invoiceForm.offSeasonFebRate,
+        offSeasonOtherMonthRate: String(getOffSeasonOtherMonthRate()),
+        offSeasonQty: invoiceForm.offSeasonQty,
+        offSeasonCharges: String(getOffSeasonAmount()),
+
+        // ✅ HAMALI
+        hamaliOtherMonthRate: invoiceForm.hamaliOtherMonthRate,
+        hamaliQty: invoiceForm.hamaliQty,
+        hamaliCharges: String(getHamaliAmount()),
+
+        // ✅ OTHER CHARGES
+        otherChargesOtherMonthRate: invoiceForm.otherChargesOtherMonthRate,
+        otherChargesQty: invoiceForm.otherChargesQty,
+        otherCharges: String(getOtherChargesAmount()),
+
+        // ✅ TOTAL
+        totalAmount: String(getGrandTotal()),
+        grandTotal: String(getGrandTotal()),
+        amountInWords: getAmountInWords(),
       };
 
       // 🔹 Slip object ONLY for PDF generation
@@ -541,11 +789,29 @@ const SlipManagement = () => {
         storageFrom: invoiceForm.storageFrom,
         storageTo: invoiceForm.storageTo,
         totalDays: invoiceForm.totalDays,
-        storageCharges: invoiceForm.storageCharges,
-        hamaliCharges: invoiceForm.hamaliCharges,
-        otherCharges: invoiceForm.otherCharges,
-        grandTotal: invoiceForm.grandTotal,
-        amountInWords: invoiceForm.amountInWords,
+
+        // 🔹 RATES
+        storageOtherMonthRate: invoiceForm.storageOtherMonthRate,
+        offSeasonJanRate: invoiceForm.offSeasonJanRate,
+        offSeasonFebRate: invoiceForm.offSeasonFebRate,
+        offSeasonOtherMonthRate: String(getOffSeasonOtherMonthRate()),
+        hamaliOtherMonthRate: invoiceForm.hamaliOtherMonthRate,
+        otherChargesOtherMonthRate: invoiceForm.otherChargesOtherMonthRate,
+
+        // 🔹 QTY
+        storageQty: invoiceForm.storageQty,
+        offSeasonQty: invoiceForm.offSeasonQty,
+        hamaliQty: invoiceForm.hamaliQty,
+        otherChargesQty: invoiceForm.otherChargesQty,
+
+        // 🔹 AMOUNTS
+        storageCharges: String(getStorageAmount()),
+        offSeasonCharges: String(getOffSeasonAmount()),
+        hamaliCharges: String(getHamaliAmount()),
+        otherCharges: String(getOtherChargesAmount()),
+        grandTotal: String(getGrandTotal()),
+        amountInWords: getAmountInWords(),
+
         createdAt: "",
       };
 
@@ -572,28 +838,46 @@ const SlipManagement = () => {
         storageFrom: "",
         storageTo: "",
         totalDays: "",
+
+        // 🔹 Rates
+        offSeasonJanRate: "",
+        offSeasonFebRate: "",
+
+        storageOtherMonthRate: "",
+        hamaliOtherMonthRate: "",
+        offSeasonOtherMonthRate: "",
+        otherChargesOtherMonthRate: "",
+
+        // 🔹 Quantity
+        storageQty: "",
+        hamaliQty: "",
+        offSeasonQty: "",
+        otherChargesQty: "",
+
+        // 🔹 Totals
         storageCharges: "",
         hamaliCharges: "",
+        offSeasonCharges: "",
         otherCharges: "",
         grandTotal: "",
         amountInWords: "",
       });
 
-      setInvoiceForm({
-        invoiceNo: "",
-        date: new Date().toISOString().split("T")[0],
-        partyName: "",
-        lotNumber: "",
-        vehicleNumber: "",
-        storageFrom: "",
-        storageTo: "",
-        totalDays: "",
-        storageCharges: "",
-        hamaliCharges: "",
-        otherCharges: "",
-        grandTotal: "",
-        amountInWords: "",
-      });
+      // setInvoiceForm({
+      //   invoiceNo: "",
+      //   date: new Date().toISOString().split("T")[0],
+      //   partyName: "",
+      //   lotNumber: "",
+      //   vehicleNumber: "",
+      //   storageFrom: "",
+      //   storageTo: "",
+      //   totalDays: "",
+      //   storageCharges: "",
+      //   hamaliCharges: "",
+      //   otherCharges: "",
+      //   grandTotal: "",
+      //   amountInWords: "",
+      // });
 
       alert("Invoice saved & PDF generated!");
     } finally {
@@ -666,6 +950,7 @@ const SlipManagement = () => {
               display: flex;
               margin-bottom: 9px;
               font-size: 13px;
+              align-items: center;
             }
 
             .label {
@@ -676,7 +961,8 @@ const SlipManagement = () => {
             .value {
               flex: 1;
               border-bottom: 1px solid #000;
-              padding-left: 6px;
+              padding: 4px 6px 4px 6px;  
+              line-height: 1.6;
             }
 
             .footer-sign {
@@ -825,6 +1111,7 @@ const SlipManagement = () => {
               display: flex;
               margin-bottom: 9px;
               font-size: 13px;
+              align-items: center;
             }
 
             .label {
@@ -835,7 +1122,8 @@ const SlipManagement = () => {
             .value {
               flex: 1;
               border-bottom: 1px solid #000;
-              padding-left: 6px;
+              padding: 4px 6px 4px 6px;  
+              line-height: 1.6;
             }
 
             .footer-sign {
@@ -982,6 +1270,7 @@ const SlipManagement = () => {
             display: flex;
             margin-bottom: 8px;
             font-size: 13px;
+            align-items: center;
           }
 
           .label {
@@ -990,10 +1279,11 @@ const SlipManagement = () => {
           }
 
           .value {
-            flex: 1;
-            border-bottom: 1px solid #000;
-            padding-left: 6px;
-          }
+              flex: 1;
+              border-bottom: 1px solid #000;
+              padding: 4px 6px 4px 6px;  
+              line-height: 1.6;
+            }
 
           table {
             width: 100%;
@@ -1067,7 +1357,9 @@ const SlipManagement = () => {
           <div class="row">
             <div class="label">Storage Period</div>
             <div class="value">
-              ${formatSlipDate(slip.storageFrom)} &nbsp; <strong>To</strong> &nbsp;
+              ${formatSlipDate(
+                slip.storageFrom
+              )} &nbsp; <strong>To</strong> &nbsp;
               ${formatSlipDate(slip.storageTo)}
             </div>
           </div>
@@ -1091,32 +1383,43 @@ const SlipManagement = () => {
             <tbody>
               <tr>
                 <td>Storage Charges</td>
-                <td>${slip.storageCharges || ""}</td>
                 <td></td>
                 <td></td>
-                <td></td>
-                <td></td>
+                <td>${slip.storageOtherMonthRate || ""}</td>
+                <td>${slip.storageQty || ""}</td>
+                <td>${slip.storageCharges}</td>
+              </tr>
+              <tr>
+                <td>Off Season Charges</td>
+                <td>${slip.offSeasonJanRate || ""}</td>
+                <td>${slip.offSeasonFebRate || ""}</td>
+                <td>${slip.offSeasonOtherMonthRate || ""}</td>
+                <td>${slip.offSeasonQty || ""}</td>
+                <td>${slip.offSeasonCharges}</td>
               </tr>
               <tr>
                 <td>Hamali Charges</td>
-                <td>${slip.hamaliCharges || ""}</td>
                 <td></td>
                 <td></td>
-                <td></td>
-                <td></td>
+                <td>${slip.hamaliOtherMonthRate || ""}</td>
+                <td>${slip.hamaliQty || ""}</td>
+                <td>${slip.hamaliCharges}</td>
               </tr>
               <tr>
                 <td>Other Charges</td>
-                <td>${slip.otherCharges || ""}</td>
                 <td></td>
                 <td></td>
-                <td></td>
-                <td></td>
+                <td>${slip.otherChargesOtherMonthRate || ""}</td>
+                <td>${slip.otherChargesQty || ""}</td>
+                <td>${slip.otherCharges}</td>
               </tr>
               <tr>
-                <td><strong>Total Amount</strong></td>
-                <td colspan="4"></td>
-                <td><strong>${slip.grandTotal}</strong></td>
+                <td colspan="5" style="text-align:center; font-weight:bold;">
+                  Total Amount
+                </td>
+                <td style="text-align:center; font-weight:bold;">
+                  ${slip.grandTotal}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -1147,15 +1450,10 @@ const SlipManagement = () => {
       </body>
     </html>
     `;
-  }
-
-
-  const getSlipNumber = (slip: Slip): string => {
-    if (slip.type === "Invoice") {
-      return (slip as InvoiceSlip).invoiceNo;
-    }
-    return (slip as GetInSlip | GetOutSlip).serialNo;
   };
+
+  const getSlipNumber = (slip: Slip): string =>
+    slip.type === "Invoice" ? slip.invoiceNo : slip.serialNo;
 
   // ------------------------------
   // Convert Blob to Base64
@@ -1319,10 +1617,8 @@ const SlipManagement = () => {
       if (!pdfUrl) {
         pdfUrl = await generateAndStorePdf(slip);
 
-        setSlips(prev =>
-          prev.map(s =>
-            s.id === slip.id ? { ...s, pdfUrl } : s
-          )
+        setSlips((prev) =>
+          prev.map((s) => (s.id === slip.id ? { ...s, pdfUrl } : s))
         );
       }
 
@@ -1347,23 +1643,136 @@ const SlipManagement = () => {
     }
   };
 
-  const filteredSlips = slips.filter(slip => {
-    if (activeTab === "history") return true;
-    if (activeTab === "getIn") return slip.type === "Get In";
-    if (activeTab === "getOut") return slip.type === "Get Out";
-    if (activeTab === "invoice") return slip.type === "Invoice";
-    return true;
-  });
+  const filteredSlips =
+    activeTab !== "history"
+      ? []
+      : slips.filter((slip) => {
+        const slipNumber = getSlipNumber(slip);
+
+        // ❌ Remove invalid rows
+        if (
+          !slip.date ||
+          slip.date === "01/01/1970" ||
+          slip.date === "1970-01-01" ||
+          (!slip.partyName && !slipNumber)
+        ) {
+          return false;
+        }
+
+        // 🔍 SEARCH FILTER
+        const query = searchQuery.toLowerCase().trim();
+        if (query) {
+          const party = String(slip.partyName || "").toLowerCase();
+          const autoSerial = String(slip.autoSerial || "").toLowerCase();
+          const slipNo = String(slipNumber || "").toLowerCase();
+
+          if (
+            !party.includes(query) &&
+            !autoSerial.includes(query) &&
+            !slipNo.includes(query)
+          ) {
+            return false;
+          }
+        }
+
+        // 🔽 SLIP TYPE FILTER
+        if (slipTypeFilter !== "all") {
+          if (slip.type !== slipTypeFilter) {
+            return false;
+          }
+        }
+
+        // 📅 SINGLE DATE FILTER (DD/MM/YYYY SAFE)
+        if (filterDate) {
+          let slipDateObj: Date | null = null;
+
+          // Case 1: YYYY-MM-DD (from input / sheet)
+          if (slip.date.includes("-")) {
+            slipDateObj = new Date(slip.date);
+          }
+
+          // Case 2: DD/MM/YYYY (history table format)
+          if (slip.date.includes("/")) {
+            const [dd, mm, yyyy] = slip.date.split("/");
+            slipDateObj = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+          }
+
+          if (!slipDateObj || isNaN(slipDateObj.getTime())) {
+            return false;
+          }
+
+          const selectedDateObj = new Date(filterDate);
+
+          slipDateObj.setHours(0, 0, 0, 0);
+          selectedDateObj.setHours(0, 0, 0, 0);
+
+          if (slipDateObj.getTime() !== selectedDateObj.getTime()) {
+            return false;
+          }
+        }
+
+        return true;
+      });
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="flex-shrink-0 p-4 md:p-6 bg-white border-b border-gray-200">
         <div className="flex justify-between items-center">
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900">Slip Management</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+            Slip Management
+          </h1>
         </div>
       </div>
+      {/* 🔍 Search + Filter Bar (ONLY FOR HISTORY TAB) */}
+      {/* 🔍 Filters Bar (ONLY FOR HISTORY TAB) */}
+      {activeTab === "history" && (
+        <div className="px-4 md:px-6 py-3 bg-white border-b border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
+            {/* 🔍 Search */}
+            <div className="relative h-full">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                type="text"
+                placeholder="Search by Party Name/ Serial No / Slip/Invoice No..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-md
+                     focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
+            {/* 🔽 Slip Type */}
+            <div className="h-full">
+              <select
+                value={slipTypeFilter}
+                onChange={(e) => setSlipTypeFilter(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md
+                     bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="Get In">Get In</option>
+                <option value="Get Out">Get Out</option>
+                <option value="Invoice">Invoice</option>
+              </select>
+            </div>
+
+            {/* 📅 Date Filter */}
+            <div className="h-full">
+              <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md
+         focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {/* Tabs */}
       <div className="flex-shrink-0 px-2 md:px-6 bg-white border-b border-gray-200 overflow-x-auto">
         <div className="flex gap-1 md:gap-2 min-w-max">
@@ -1418,25 +1827,47 @@ const SlipManagement = () => {
             <div className="bg-yellow-100 rounded-lg shadow-lg p-4 md:p-8 border-2 border-black">
               {/* Header */}
               <div className="text-center mb-4 md:mb-6 border-b-2 border-black pb-3 md:pb-4">
-                <h3 className="text-base md:text-lg font-bold mb-2">आवक पर्ची / Provisional Receipt</h3>
-                <h2 className="text-xl md:text-2xl font-bold mb-2">BMS COLD STORAGE</h2>
-                <p className="text-xs md:text-sm font-semibold">(A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)</p>
-                <p className="text-xs md:text-sm">Village - BANA (DHARSIWA) RAIPUR 492099</p>
-                <p className="text-xs md:text-sm">Mob.: 7024566009, 7024066009</p>
-                <p className="text-xs md:text-sm">E-mail: bmscoldstorage@gmail.com</p>
+                <h3 className="text-base md:text-lg font-bold mb-2">
+                  आवक पर्ची / Provisional Receipt
+                </h3>
+                <h2 className="text-xl md:text-2xl font-bold mb-2">
+                  BMS COLD STORAGE
+                </h2>
+                <p className="text-xs md:text-sm font-semibold">
+                  (A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)
+                </p>
+                <p className="text-xs md:text-sm">
+                  Village - BANA (DHARSIWA) RAIPUR 492099
+                </p>
+                <p className="text-xs md:text-sm">
+                  Mob.: 7024566009, 7024066009
+                </p>
+                <p className="text-xs md:text-sm">
+                  E-mail: bmscoldstorage@gmail.com
+                </p>
               </div>
 
               {/* Form */}
-              <form onSubmit={handleGetInSubmit} className="space-y-2 md:space-y-3">
+              <form
+                onSubmit={handleGetInSubmit}
+                className="space-y-2 md:space-y-3"
+              >
                 {/* Serial No and Date */}
                 <div className="flex flex-col md:flex-row gap-2 md:gap-4">
                   <div className="flex-1">
                     <div className="flex flex-col md:flex-row md:items-center">
-                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">क्र.:</label>
+                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                        क्र.:
+                      </label>
                       <input
                         type="text"
                         value={getInForm.serialNo}
-                        onChange={(e) => setGetInForm({...getInForm, serialNo: e.target.value})}
+                        onChange={(e) =>
+                          setGetInForm({
+                            ...getInForm,
+                            serialNo: e.target.value,
+                          })
+                        }
                         // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
@@ -1444,11 +1875,15 @@ const SlipManagement = () => {
                   </div>
                   <div className="flex-1">
                     <div className="flex flex-col md:flex-row md:items-center">
-                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">दिनांक:</label>
+                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                        दिनांक:
+                      </label>
                       <input
                         type="date"
                         value={getInForm.date}
-                        onChange={(e) => setGetInForm({...getInForm, date: e.target.value})}
+                        onChange={(e) =>
+                          setGetInForm({ ...getInForm, date: e.target.value })
+                        }
                         // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
@@ -1458,11 +1893,15 @@ const SlipManagement = () => {
 
                 {/* Party Name */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">पार्टी का नाम:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    पार्टी का नाम:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.partyName}
-                    onChange={(e) => setGetInForm({...getInForm, partyName: e.target.value})}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, partyName: e.target.value })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1470,22 +1909,30 @@ const SlipManagement = () => {
 
                 {/* Place */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">मार्फत / एजेंट:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    मार्फत / एजेंट:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.place}
-                    onChange={(e) => setGetInForm({...getInForm, place: e.target.value})}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, place: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Material */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">जिन्स:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    जिन्स:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.material}
-                    onChange={(e) => setGetInForm({...getInForm, material: e.target.value})}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, material: e.target.value })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1493,34 +1940,47 @@ const SlipManagement = () => {
 
                 {/* Bharti */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">भरती:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    भरती:
+                  </label>
                   <input
-                      type="text"
-                      value={getInForm.bharti}
-                      onChange={(e) => setGetInForm({ ...getInForm, bharti: e.target.value })}
-                      className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
-                    />
+                    type="text"
+                    value={getInForm.bharti}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, bharti: e.target.value })
+                    }
+                    className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
+                  />
                 </div>
 
                 {/* Killa */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">किल्ला:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    किल्ला:
+                  </label>
                   <input
-                      type="text"
-                      value={getInForm.killa}
-                      onChange={(e) => setGetInForm({ ...getInForm, killa: e.target.value })}
-                      className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
-                    />
+                    type="text"
+                    value={getInForm.killa}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, killa: e.target.value })
+                    }
+                    className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
+                  />
                 </div>
 
                 {/* Dharamkol Weight */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">धरमकाँटा वजन:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    धरमकाँटा वजन:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.dharamKantaWeight}
                     onChange={(e) =>
-                      setGetInForm({ ...getInForm, dharamKantaWeight: e.target.value })
+                      setGetInForm({
+                        ...getInForm,
+                        dharamKantaWeight: e.target.value,
+                      })
                     }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1528,12 +1988,16 @@ const SlipManagement = () => {
 
                 {/* Taad Weight */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">ताड़ वजन:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    ताड़ वजन:
+                  </label>
                   <div className="flex-1 flex flex-col md:flex-row gap-2">
                     <input
                       type="text"
                       value={getInForm.qty}
-                      onChange={(e) => setGetInForm({...getInForm, qty: e.target.value})}
+                      onChange={(e) =>
+                        setGetInForm({ ...getInForm, qty: e.target.value })
+                      }
                       // required
                       placeholder="Qty"
                       className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
@@ -1541,7 +2005,9 @@ const SlipManagement = () => {
                     <input
                       type="text"
                       value={getInForm.rate}
-                      onChange={(e) => setGetInForm({...getInForm, rate: e.target.value})}
+                      onChange={(e) =>
+                        setGetInForm({ ...getInForm, rate: e.target.value })
+                      }
                       placeholder="Rate"
                       className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                     />
@@ -1550,11 +2016,15 @@ const SlipManagement = () => {
 
                 {/* Truck No */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">ट्रक नं.:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    ट्रक नं.:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.truckNo}
-                    onChange={(e) => setGetInForm({...getInForm, truckNo: e.target.value})}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, truckNo: e.target.value })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1562,45 +2032,59 @@ const SlipManagement = () => {
 
                 {/* Driver */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">ड्राइवर:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    ड्राइवर:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.driver}
-                    onChange={(e) => setGetInForm({...getInForm, driver: e.target.value})}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, driver: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Mobile No */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">मोबाइल नं.:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    मोबाइल नं.:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.mobileNo}
-                    onChange={(e) => setGetInForm({...getInForm, mobileNo: e.target.value})}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, mobileNo: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Remarks */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">रिमार्क्स:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    रिमार्क्स:
+                  </label>
                   <input
                     type="text"
                     value={getInForm.remarks}
-                    onChange={(e) => setGetInForm({...getInForm, remarks: e.target.value})}
+                    onChange={(e) =>
+                      setGetInForm({ ...getInForm, remarks: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Footer */}
                 <div className="pt-4 md:pt-6 text-right border-t-2 border-black mt-4 md:mt-6">
-                  <p className="text-xs md:text-sm mb-4">प्रतिनिधि / ड्राइवर के हस्ताक्षर __________ प्रबंधक</p>
+                  <p className="text-xs md:text-sm mb-4">
+                    प्रतिनिधि / ड्राइवर के हस्ताक्षर __________ प्रबंधक
+                  </p>
                   <button
                     type="submit"
                     disabled={saving}
                     className="w-full md:w-auto px-4 md:px-6 py-2 text-white font-semibold rounded-md text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#1e40af' }}
+                    style={{ backgroundColor: "#1e40af" }}
                   >
                     {saving ? "Saving..." : "Save Get In Slip"}
                   </button>
@@ -1617,24 +2101,44 @@ const SlipManagement = () => {
               {/* Header */}
               <div className="text-center mb-4 md:mb-6 border-b-2 border-black pb-3 md:pb-4">
                 <h3 className="text-base md:text-lg font-bold mb-2">गेट पास</h3>
-                <h2 className="text-xl md:text-2xl font-bold mb-2">BMS COLD STORAGE</h2>
-                <p className="text-xs md:text-sm font-semibold">(A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)</p>
-                <p className="text-xs md:text-sm">Village - BANA (DHARSIWA) RAIPUR 492099</p>
-                <p className="text-xs md:text-sm">Mob.: 7024566009, 7024066009</p>
-                <p className="text-xs md:text-sm">E-mail: bmscoldstorage@gmail.com</p>
+                <h2 className="text-xl md:text-2xl font-bold mb-2">
+                  BMS COLD STORAGE
+                </h2>
+                <p className="text-xs md:text-sm font-semibold">
+                  (A UNIT OF CHANDAN TRADING COMPANY PVT. LTD.)
+                </p>
+                <p className="text-xs md:text-sm">
+                  Village - BANA (DHARSIWA) RAIPUR 492099
+                </p>
+                <p className="text-xs md:text-sm">
+                  Mob.: 7024566009, 7024066009
+                </p>
+                <p className="text-xs md:text-sm">
+                  E-mail: bmscoldstorage@gmail.com
+                </p>
               </div>
 
               {/* Form */}
-              <form onSubmit={handleGetOutSubmit} className="space-y-2 md:space-y-3">
+              <form
+                onSubmit={handleGetOutSubmit}
+                className="space-y-2 md:space-y-3"
+              >
                 {/* Serial No and Date */}
                 <div className="flex flex-col md:flex-row gap-2 md:gap-4">
                   <div className="flex-1">
                     <div className="flex flex-col md:flex-row md:items-center">
-                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">क्र.:</label>
+                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                        क्र.:
+                      </label>
                       <input
                         type="text"
                         value={getOutForm.serialNo}
-                        onChange={(e) => setGetOutForm({...getOutForm, serialNo: e.target.value})}
+                        onChange={(e) =>
+                          setGetOutForm({
+                            ...getOutForm,
+                            serialNo: e.target.value,
+                          })
+                        }
                         // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
@@ -1642,11 +2146,15 @@ const SlipManagement = () => {
                   </div>
                   <div className="flex-1">
                     <div className="flex flex-col md:flex-row md:items-center">
-                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">दिनांक:</label>
+                      <label className="w-full md:w-32 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                        दिनांक:
+                      </label>
                       <input
                         type="date"
                         value={getOutForm.date}
-                        onChange={(e) => setGetOutForm({...getOutForm, date: e.target.value})}
+                        onChange={(e) =>
+                          setGetOutForm({ ...getOutForm, date: e.target.value })
+                        }
                         // required
                         className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                       />
@@ -1656,11 +2164,18 @@ const SlipManagement = () => {
 
                 {/* Party Name */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">पार्टी का नाम:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    पार्टी का नाम:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.partyName}
-                    onChange={(e) => setGetOutForm({...getOutForm, partyName: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({
+                        ...getOutForm,
+                        partyName: e.target.value,
+                      })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1668,33 +2183,48 @@ const SlipManagement = () => {
 
                 {/* Place */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">स्थान:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    स्थान:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.place}
-                    onChange={(e) => setGetOutForm({...getOutForm, place: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({ ...getOutForm, place: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Material Receive */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">मार्फत / माल प्राप्तकर्ता:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    मार्फत / माल प्राप्तकर्ता:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.materialReceive}
-                    onChange={(e) => setGetOutForm({...getOutForm, materialReceive: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({
+                        ...getOutForm,
+                        materialReceive: e.target.value,
+                      })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Jins */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">जिन्स:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    जिन्स:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.jins}
-                    onChange={(e) => setGetOutForm({...getOutForm, jins: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({ ...getOutForm, jins: e.target.value })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1702,44 +2232,66 @@ const SlipManagement = () => {
 
                 {/* Net Weight */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">माल नंबर / रसीद नं.:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    माल नंबर / रसीद नं.:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.netWeight}
-                    onChange={(e) => setGetOutForm({...getOutForm, netWeight: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({
+                        ...getOutForm,
+                        netWeight: e.target.value,
+                      })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Quantity */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">बोरा:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    बोरा:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.qty}
-                    onChange={(e) => setGetOutForm({...getOutForm, qty: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({ ...getOutForm, qty: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Taad Weight */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">धरमकाँटा वजन:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    धरमकाँटा वजन:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.taadWeight}
-                    onChange={(e) => setGetOutForm({...getOutForm, taadWeight: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({
+                        ...getOutForm,
+                        taadWeight: e.target.value,
+                      })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Truck No */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">ट्रक नं.:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    ट्रक नं.:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.truckNo}
-                    onChange={(e) => setGetOutForm({...getOutForm, truckNo: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({ ...getOutForm, truckNo: e.target.value })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1747,34 +2299,44 @@ const SlipManagement = () => {
 
                 {/* Driver */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">ड्राइवर:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    ड्राइवर:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.driver}
-                    onChange={(e) => setGetOutForm({...getOutForm, driver: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({ ...getOutForm, driver: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Remarks */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">रिमार्क्स:</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    रिमार्क्स:
+                  </label>
                   <input
                     type="text"
                     value={getOutForm.remarks}
-                    onChange={(e) => setGetOutForm({...getOutForm, remarks: e.target.value})}
+                    onChange={(e) =>
+                      setGetOutForm({ ...getOutForm, remarks: e.target.value })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Footer */}
                 <div className="pt-4 md:pt-6 text-right border-t-2 border-black mt-4 md:mt-6">
-                  <p className="text-xs md:text-sm mb-4">प्रतिनिधि / ड्राइवर के हस्ताक्षर __________ प्रबंधक</p>
+                  <p className="text-xs md:text-sm mb-4">
+                    प्रतिनिधि / ड्राइवर के हस्ताक्षर __________ प्रबंधक
+                  </p>
                   <button
                     type="submit"
                     disabled={saving}
                     className="w-full md:w-auto px-4 md:px-6 py-2 text-white font-semibold rounded-md text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#1e40af' }}
+                    style={{ backgroundColor: "#1e40af" }}
                   >
                     {saving ? "Saving..." : "Save Get Out Slip"}
                   </button>
@@ -1790,21 +2352,35 @@ const SlipManagement = () => {
             <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 border-2 border-black">
               {/* Header */}
               <div className="text-center mb-4 md:mb-6 border-2 border-black p-3 md:p-4">
-                <h2 className="text-xl md:text-2xl font-bold mb-2">BMS COLD STORAGE</h2>
+                <h2 className="text-xl md:text-2xl font-bold mb-2">
+                  BMS COLD STORAGE
+                </h2>
                 <p className="text-xs md:text-sm">Bana, [Location]</p>
               </div>
 
-              <div className="font-bold mb-3 md:mb-4 text-sm md:text-base">INVOICE</div>
+              <div className="font-bold mb-3 md:mb-4 text-sm md:text-base">
+                INVOICE
+              </div>
 
               {/* Form */}
-              <form onSubmit={handleInvoiceSubmit} className="space-y-2 md:space-y-3">
+              <form
+                onSubmit={handleInvoiceSubmit}
+                className="space-y-2 md:space-y-3"
+              >
                 {/* Invoice No */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">Invoice No.</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    Invoice No.
+                  </label>
                   <input
                     type="text"
                     value={invoiceForm.invoiceNo}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, invoiceNo: e.target.value})}
+                    onChange={(e) =>
+                      setInvoiceForm({
+                        ...invoiceForm,
+                        invoiceNo: e.target.value,
+                      })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1812,11 +2388,15 @@ const SlipManagement = () => {
 
                 {/* Date */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">Date</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    Date
+                  </label>
                   <input
                     type="date"
                     value={invoiceForm.date}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, date: e.target.value})}
+                    onChange={(e) =>
+                      setInvoiceForm({ ...invoiceForm, date: e.target.value })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1824,11 +2404,18 @@ const SlipManagement = () => {
 
                 {/* Party Name */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">Party Name</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    Party Name
+                  </label>
                   <input
                     type="text"
                     value={invoiceForm.partyName}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, partyName: e.target.value})}
+                    onChange={(e) =>
+                      setInvoiceForm({
+                        ...invoiceForm,
+                        partyName: e.target.value,
+                      })
+                    }
                     // required
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
@@ -1837,20 +2424,34 @@ const SlipManagement = () => {
                 {/* Lot Number and Vehicle Number */}
                 <div className="flex flex-col md:flex-row gap-2 md:gap-4">
                   <div className="flex-1 flex flex-col md:flex-row md:items-center">
-                    <label className="w-full md:w-40 font-bold text-xs md:text-sm mb-1 md:mb-0">Lot Number</label>
+                    <label className="w-full md:w-40 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                      Lot Number
+                    </label>
                     <input
                       type="text"
                       value={invoiceForm.lotNumber}
-                      onChange={(e) => setInvoiceForm({...invoiceForm, lotNumber: e.target.value})}
+                      onChange={(e) =>
+                        setInvoiceForm({
+                          ...invoiceForm,
+                          lotNumber: e.target.value,
+                        })
+                      }
                       className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                     />
                   </div>
                   <div className="flex-1 flex flex-col md:flex-row md:items-center">
-                    <label className="w-full md:w-40 font-bold text-xs md:text-sm mb-1 md:mb-0">Vehicle Number</label>
+                    <label className="w-full md:w-40 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                      Vehicle Number
+                    </label>
                     <input
                       type="text"
                       value={invoiceForm.vehicleNumber}
-                      onChange={(e) => setInvoiceForm({...invoiceForm, vehicleNumber: e.target.value})}
+                      onChange={(e) =>
+                        setInvoiceForm({
+                          ...invoiceForm,
+                          vehicleNumber: e.target.value,
+                        })
+                      }
                       className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                     />
                   </div>
@@ -1858,99 +2459,265 @@ const SlipManagement = () => {
 
                 {/* Storage Period */}
                 <div className="flex flex-col md:flex-row md:items-center gap-2">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm">Storage Period: From</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm">
+                    Storage Period: From
+                  </label>
                   <input
                     type="date"
                     value={invoiceForm.storageFrom}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, storageFrom: e.target.value})}
+                    onChange={(e) =>
+                      setInvoiceForm({
+                        ...invoiceForm,
+                        storageFrom: e.target.value,
+                      })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                   <span className="font-bold text-xs md:text-sm">To</span>
                   <input
                     type="date"
                     value={invoiceForm.storageTo}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, storageTo: e.target.value})}
+                    onChange={(e) =>
+                      setInvoiceForm({
+                        ...invoiceForm,
+                        storageTo: e.target.value,
+                      })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Total Days */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">Total Storage Days</label>
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    Total Storage Days
+                  </label>
                   <input
                     type="text"
                     value={invoiceForm.totalDays}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, totalDays: e.target.value})}
+                    onChange={(e) =>
+                      setInvoiceForm({
+                        ...invoiceForm,
+                        totalDays: e.target.value,
+                      })
+                    }
                     className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
 
                 {/* Table */}
-                <div className="mt-4 md:mt-6 overflow-x-auto">
-                  <table className="w-full border-collapse border-2 border-black min-w-max">
+                {/* <div className="mt-4 md:mt-6 overflow-x-auto"> */}
+                <div className="mt-4 md:mt-6">
+                  {/* <table className="w-full border-collapse border-2 border-black min-w-max"> */}
+                  <table className="w-full border-collapse border-2 border-black table-fixed">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">Description</th>
-                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">Jan (Rate)</th>
-                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">Feb (Rate)</th>
-                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">Other Months (Rate)</th>
-                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">Quantity</th>
-                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">Amount (INR)</th>
+                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">
+                          Description
+                        </th>
+                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">
+                          Jan (Rate)
+                        </th>
+                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">
+                          Feb (Rate)
+                        </th>
+                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">
+                          Other Months (Rate)
+                        </th>
+                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">
+                          Quantity (Bag)
+                        </th>
+                        <th className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-left font-bold">
+                          Amount (INR)
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">Storage Charges</td>
-                        <td className="border border-black px-2 md:px-3 py-2">
-                          <input
-                            type="text"
-                            value={invoiceForm.storageCharges}
-                            onChange={(e) => setInvoiceForm({...invoiceForm, storageCharges: e.target.value})}
-                            className="w-full px-1 md:px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs md:text-sm"
-                          />
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">
+                          Storage Charges
                         </td>
                         <td className="border border-black px-2 md:px-3 py-2"></td>
                         <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                      </tr>
-                      <tr>
-                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">Hamali Charges</td>
                         <td className="border border-black px-2 md:px-3 py-2">
                           <input
                             type="text"
-                            value={invoiceForm.hamaliCharges}
-                            onChange={(e) => setInvoiceForm({...invoiceForm, hamaliCharges: e.target.value})}
-                            className="w-full px-1 md:px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs md:text-sm"
+                            value={invoiceForm.storageOtherMonthRate}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                storageOtherMonthRate: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
                           />
                         </td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                      </tr>
-                      <tr>
-                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">Other Charges</td>
                         <td className="border border-black px-2 md:px-3 py-2">
                           <input
                             type="text"
-                            value={invoiceForm.otherCharges}
-                            onChange={(e) => setInvoiceForm({...invoiceForm, otherCharges: e.target.value})}
-                            className="w-full px-1 md:px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs md:text-sm"
+                            value={invoiceForm.storageQty}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                storageQty: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
                           />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-center">
+                          {invoiceForm.storageOtherMonthRate &&
+                          invoiceForm.storageQty
+                            ? getStorageAmount()
+                            : ""}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">
+                          Off Season Charges
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2">
+                          <input
+                            type="text"
+                            value={invoiceForm.offSeasonJanRate}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                offSeasonJanRate: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
+                          />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2">
+                          <input
+                            type="text"
+                            value={invoiceForm.offSeasonFebRate}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                offSeasonFebRate: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
+                          />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs text-center md:text-sm">
+                          {invoiceForm.offSeasonJanRate ||
+                          invoiceForm.offSeasonFebRate
+                            ? getOffSeasonOtherMonthRate()
+                            : ""}
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2">
+                          <input
+                            type="text"
+                            value={invoiceForm.offSeasonQty}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                offSeasonQty: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
+                          />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-center">
+                          {(invoiceForm.offSeasonJanRate ||
+                            invoiceForm.offSeasonFebRate) &&
+                          invoiceForm.offSeasonQty
+                            ? getOffSeasonAmount()
+                            : ""}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">
+                          Other Charges
                         </td>
                         <td className="border border-black px-2 md:px-3 py-2"></td>
                         <td className="border border-black px-2 md:px-3 py-2"></td>
+                        <td className="border border-black px-2 md:px-3 py-2">
+                          <input
+                            type="text"
+                            value={invoiceForm.otherChargesOtherMonthRate}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                otherChargesOtherMonthRate: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
+                          />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2">
+                          <input
+                            type="text"
+                            value={invoiceForm.otherChargesQty}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                otherChargesQty: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
+                          />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-center">
+                          {invoiceForm.otherChargesOtherMonthRate &&
+                          invoiceForm.otherChargesQty
+                            ? getOtherChargesAmount()
+                            : ""}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">
+                          Hamali Charges
+                        </td>
                         <td className="border border-black px-2 md:px-3 py-2"></td>
                         <td className="border border-black px-2 md:px-3 py-2"></td>
+                        <td className="border border-black px-2 md:px-3 py-2">
+                          <input
+                            type="text"
+                            value={invoiceForm.hamaliOtherMonthRate}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                hamaliOtherMonthRate: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
+                          />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2">
+                          <input
+                            type="text"
+                            value={invoiceForm.hamaliQty}
+                            onChange={(e) =>
+                              setInvoiceForm({
+                                ...invoiceForm,
+                                hamaliQty: e.target.value,
+                              })
+                            }
+                            className={tableInputClass}
+                          />
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm text-center">
+                          {invoiceForm.hamaliOtherMonthRate &&
+                          invoiceForm.hamaliQty
+                            ? getHamaliAmount()
+                            : ""}
+                        </td>
                       </tr>
                       <tr>
-                        <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">Total Amount</td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2"></td>
-                        <td className="border border-black px-2 md:px-3 py-2 font-bold text-xs md:text-sm">{invoiceForm.grandTotal}</td>
+                        <td
+                          colSpan={5}
+                          className="border border-black px-2 md:px-3 py-2 text-center font-bold text-xs md:text-sm"
+                        >
+                          Total Amount
+                        </td>
+                        <td className="border border-black px-2 md:px-3 py-2 font-bold text-center text-xs md:text-sm">
+                          {getGrandTotal()}
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -1958,44 +2725,54 @@ const SlipManagement = () => {
 
                 {/* Grand Total */}
                 <div className="flex flex-col md:flex-row md:items-center mt-3 md:mt-4">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">Grand Total (INR)</label>
-                  <input
-                    type="text"
-                    value={invoiceForm.grandTotal}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, grandTotal: e.target.value})}
-                    required
-                    className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
-                  />
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    Grand Total (INR)
+                  </label>
+                  <td className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none font-bold focus:border-blue-600 text-sm">
+                    {getGrandTotal()}
+                  </td>
                 </div>
 
                 {/* Amount in Words */}
                 <div className="flex flex-col md:flex-row md:items-center">
-                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">Amount in Words</label>
-                  <input
-                    type="text"
-                    value={invoiceForm.amountInWords}
-                    onChange={(e) => setInvoiceForm({...invoiceForm, amountInWords: e.target.value})}
-                    className="flex-1 px-2 md:px-3 py-1.5 bg-white border-b-2 border-black focus:outline-none focus:border-blue-600 text-sm"
-                  />
+                  <label className="w-full md:w-48 font-bold text-xs md:text-sm mb-1 md:mb-0">
+                    Amount in Words
+                  </label>
+                  <div className="flex-1 px-2 md:px-3 py-1.5 bg-gray-50 border-b-2 border-black text-sm font-semibold">
+                    {getAmountInWords()}
+                  </div>
                 </div>
 
                 {/* Terms & Conditions */}
                 <div className="mt-4 md:mt-6">
-                  <p className="font-bold mb-2 text-xs md:text-sm">Terms & Conditions</p>
-                  <p className="text-xs md:text-sm">Payment should be made within ___ days from the invoice date</p>
-                  <p className="text-xs md:text-sm">Late payments will attract interest as per company policy.</p>
-                  <p className="text-xs md:text-sm">The company is not responsible for damages due to unforeseen circumstances.</p>
+                  <p className="font-bold mb-2 text-xs md:text-sm">
+                    Terms & Conditions
+                  </p>
+                  <p className="text-xs md:text-sm">
+                    Payment should be made within ___ days from the invoice date
+                  </p>
+                  <p className="text-xs md:text-sm">
+                    Late payments will attract interest as per company policy.
+                  </p>
+                  <p className="text-xs md:text-sm">
+                    The company is not responsible for damages due to unforeseen
+                    circumstances.
+                  </p>
                 </div>
 
                 {/* Signature */}
                 <div className="text-center mt-6 md:mt-8 pt-4 md:pt-6 border-t-2 border-black">
-                  <p className="font-bold text-xs md:text-sm">Authorized Signatory</p>
-                  <p className="text-xs md:text-sm mb-4">(For BMS Cold Storage)</p>
+                  <p className="font-bold text-xs md:text-sm">
+                    Authorized Signatory
+                  </p>
+                  <p className="text-xs md:text-sm mb-4">
+                    (For BMS Cold Storage)
+                  </p>
                   <button
                     type="submit"
                     disabled={saving}
                     className="w-full md:w-auto px-4 md:px-6 py-2 text-white font-semibold rounded-md text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#1e40af' }}
+                    style={{ backgroundColor: "#1e40af" }}
                   >
                     {saving ? "Saving..." : "Save Invoice"}
                   </button>
@@ -2008,7 +2785,6 @@ const SlipManagement = () => {
         {/* History Tab */}
         {activeTab === "history" && (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-
             {/* ⭐ LOADING EFFECT */}
             {loadingSlips ? (
               <div className="p-6 text-center text-gray-600 text-sm">
@@ -2021,10 +2797,13 @@ const SlipManagement = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-3 md:px-6 py-3 md:py-4 text-xs font-bold tracking-wider text-left text-gray-700 uppercase">
+                        Serial No
+                      </th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-xs font-bold tracking-wider text-left text-gray-700 uppercase">
                         Type
                       </th>
                       <th className="px-3 md:px-6 py-3 md:py-4 text-xs font-bold tracking-wider text-left text-gray-700 uppercase">
-                        Serial/Invoice No
+                        Slip/Invoice No
                       </th>
                       <th className="px-3 md:px-6 py-3 md:py-4 text-xs font-bold tracking-wider text-left text-gray-700 uppercase">
                         Date
@@ -2041,6 +2820,9 @@ const SlipManagement = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredSlips.map((slip) => (
                       <tr key={slip.id} className="hover:bg-gray-50">
+                        <td className="px-3 md:px-6 py-3 md:py-4 text-xs md:text-sm text-gray-900">
+                          {slip.autoSerial || "-"}
+                        </td>
                         <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center px-2 md:px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -2088,7 +2870,9 @@ const SlipManagement = () => {
                               ) : (
                                 <>
                                   <Printer size={16} />
-                                  <span className="hidden md:inline">Print</span>
+                                  <span className="hidden md:inline">
+                                    Print
+                                  </span>
                                 </>
                               )}
                             </button>
