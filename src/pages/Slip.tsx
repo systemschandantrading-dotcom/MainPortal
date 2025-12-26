@@ -2574,7 +2574,7 @@ const SlipManagement = () => {
                       </tr>
                       <tr>
                         <td className="border border-black px-2 md:px-3 py-2 text-xs md:text-sm font-bold">
-                          Off Season Charges
+                          Off Season Charges(Jan+Feb)
                         </td>
                         <td className="border border-black px-2 md:px-3 py-2">
                           <input
