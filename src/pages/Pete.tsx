@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, X, Upload, Eye, Calendar } from "lucide-react";
+import { Plus, X, Upload, Eye, Calendar, Loader2, CheckCircle } from "lucide-react";
 
 // ============================
 // TYPES
@@ -35,6 +35,8 @@ const PetePage = () => {
   const [showModal, setShowModal] = useState(false);
   const [peteEntries, setPeteEntries] = useState<PeteEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const [formData, setFormData] = useState<FormDataType>({
     name: "",
@@ -146,6 +148,8 @@ const PetePage = () => {
       return;
     }
 
+    setSubmitting(true);
+
     const newEntry = {
       id: Date.now(),
       timestamp: formatTimestamp(),
@@ -161,6 +165,7 @@ const PetePage = () => {
 
       await fetchPeteData();
 
+      // Reset form
       setFormData({
         name: "",
         date: new Date().toISOString().split("T")[0],
@@ -173,9 +178,19 @@ const PetePage = () => {
         photoPreview: null,
       });
 
+      setSubmitting(false);
       setShowModal(false);
+
+      // Show success message
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+      }, 3000);
+
     } catch (error) {
       console.error("Error submitting entry:", error);
+      setSubmitting(false);
+      alert("Failed to submit entry. Please try again.");
     }
   };
 
@@ -204,6 +219,19 @@ const PetePage = () => {
   // ============================
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
+      {/* SUCCESS MESSAGE */}
+      {showSuccess && (
+        <div className="fixed top-4 right-4 z-50 animate-slideIn">
+          <div className="bg-green-500 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3">
+            <CheckCircle className="w-6 h-6" />
+            <div>
+              <p className="font-semibold">Success!</p>
+              <p className="text-sm text-green-100">Pete entry added successfully</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
@@ -404,9 +432,8 @@ const PetePage = () => {
                       onChange={handleInputChange}
                       placeholder="0.00"
                       disabled={formData.creditAmount !== ""}
-                      className={`w-full pl-7 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-sm ${
-                        formData.creditAmount !== "" ? "bg-gray-100 cursor-not-allowed" : ""
-                      }`}
+                      className={`w-full pl-7 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-sm ${formData.creditAmount !== "" ? "bg-gray-100 cursor-not-allowed" : ""
+                        }`}
                     />
                   </div>
                 </div>
@@ -424,9 +451,8 @@ const PetePage = () => {
                       onChange={handleInputChange}
                       placeholder="0.00"
                       disabled={formData.debitAmount !== ""}
-                      className={`w-full pl-7 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-sm ${
-                        formData.debitAmount !== "" ? "bg-gray-100 cursor-not-allowed" : ""
-                      }`}
+                      className={`w-full pl-7 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-sm ${formData.debitAmount !== "" ? "bg-gray-100 cursor-not-allowed" : ""
+                        }`}
                     />
                   </div>
                 </div>
@@ -520,9 +546,20 @@ const PetePage = () => {
 
               <button
                 onClick={handleSubmit}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-700 rounded-lg hover:bg-blue-800"
+                disabled={submitting}
+                className={`px-5 py-2 text-sm font-medium text-white rounded-lg flex items-center gap-2 transition-all ${submitting
+                    ? "bg-blue-400 cursor-not-allowed"
+                    : "bg-blue-700 hover:bg-blue-800"
+                  }`}
               >
-                Submit
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit"
+                )}
               </button>
             </div>
           </div>
