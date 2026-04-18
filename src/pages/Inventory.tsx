@@ -163,13 +163,13 @@ const InventoryPage = () => {
                         {item.itemName}
                       </td>
                       <td className="px-4 py-3 text-sm text-center">
-                        {item.totalIn}
+                        {Number(item.totalIn || 0).toFixed(3)}
                       </td>
                       <td className="px-4 py-3 text-sm text-center">
-                        {item.totalOut}
+                        {Number(item.totalOut || 0).toFixed(3)}
                       </td>
                       <td className="px-4 py-3 text-sm text-center">
-                        {item.currentBalance}
+                        {Number(item.currentBalance || 0).toFixed(3)}
                       </td>
                       <td className="px-4 py-3 text-sm text-center">
                         {formatDate(item.lastInDate)}
