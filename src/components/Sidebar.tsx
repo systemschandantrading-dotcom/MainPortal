@@ -181,8 +181,30 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       </nav>
 
       {/* User Info & Logout Button */}
-      <div className="px-4 py-4 border-t border-indigo-700 space-y-2">
+      <div className="px-4 py-4 border-t border-indigo-700 space-y-4">
         
+        {/* User Info & Bell */}
+        <div className="flex items-center justify-between px-4 text-indigo-100">
+          <div className="flex items-center space-x-3">
+            <div className="flex justify-center items-center w-10 h-10 bg-indigo-800 rounded-full border border-indigo-600 flex-shrink-0">
+              <User size={22} className="text-indigo-200" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">{user?.id || "Guest"}</p>
+              <p className="text-xs text-indigo-300">
+                {user?.role === "admin" ? "Administrator" : "Maintenance Team"}
+              </p>
+            </div>
+          </div>
+          <div className="relative">
+            <Bell
+              size={20}
+              className="text-indigo-200 cursor-pointer hover:text-white transition-colors"
+            />
+            <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full"></span>
+          </div>
+        </div>
+
         {/* Logout Button */}
         <button
           onClick={() => {

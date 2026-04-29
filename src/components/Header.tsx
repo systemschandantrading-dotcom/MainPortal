@@ -15,26 +15,6 @@ const Header: React.FC<HeaderProps> = ({ children }) => {
         <div className="flex items-center gap-4">
           {children}
         </div>
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <Bell
-              size={20}
-              className="text-gray-500 cursor-pointer hover:text-indigo-600"
-            />
-            <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-          </div>
-          <div className="flex items-center space-x-2 cursor-pointer">
-            <div className="flex justify-center items-center w-9 h-9 bg-indigo-100 rounded-full">
-              <User size={20} className="text-indigo-600" />
-            </div>
-            <div className="hidden md:block">
-              <p className="text-sm font-medium">{user?.id || "Guest"}</p>
-              <p className="text-xs text-gray-500">
-                {user?.role === "admin" ? "Administrator" : "Maintenance Team"}
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </header>
   );

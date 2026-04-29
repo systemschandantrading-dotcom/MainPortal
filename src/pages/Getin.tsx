@@ -9,6 +9,7 @@ const SHEET_ID = import.meta.env.VITE_SHEET_ID as string;
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY as string;
 const DRIVE_FOLDER_ID = "1trTkjeNIjmT15fcGMgYZOIHVPqScK1Kb";
 
+//url
 if (!SCRIPT_URL) console.error("❌ VITE_APP_SCRIPT_URL is missing.");
 if (!SHEET_ID) console.error("❌ VITE_SHEET_ID is missing.");
 if (!GOOGLE_API_KEY) console.error("❌ VITE_GOOGLE_API_KEY is missing.");
