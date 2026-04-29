@@ -142,16 +142,16 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
   const accessibleRoutes = getAccessibleRoutes();
 
   return (
-    <div className="flex flex-col h-full bg-indigo-900 ">
+    <div className="flex flex-col h-full bg-indigo-900 transition-all duration-300">
       {/* Header with Text Only & Collapse Toggle */}
-      <div className={`flex items-center px-4 py-5 border-b border-indigo-700 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-        <div className="flex items-center flex-1">
+      <div className={`flex items-center py-5 border-b border-indigo-700 transition-all duration-300 ${isCollapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'flex-1'}`}>
           {isCollapsed ? (
-            <p className="text-white font-bold text-xl tracking-wide">
-              C<span className="text-orange-400">T</span>
-            </p>
+            <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center text-white font-bold text-xl shadow-md animate-fade-in">
+              C
+            </div>
           ) : (
-            <p className="text-white font-bold text-lg tracking-wide">
+            <p className="text-white font-bold text-xl tracking-wide whitespace-nowrap animate-fade-in">
               Chandan<span className="text-orange-400">Trading</span>
             </p>
           )}
@@ -161,7 +161,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
         {!onClose && setIsCollapsed && (
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex p-1.5 text-indigo-200 rounded-md hover:text-white hover:bg-indigo-800 focus:outline-none transition-colors"
+            className={`hidden lg:flex p-2 text-indigo-200 rounded-lg hover:text-white hover:bg-indigo-800 focus:outline-none transition-all duration-200 ${isCollapsed ? 'absolute left-20 ml-2 bg-indigo-800 shadow-md z-50' : ''}`}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
           </button>
