@@ -10,6 +10,9 @@ import {
   BookOpen,
   Package,
   Database,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Receipt,
 } from "lucide-react";
 import useAuthStore from "../store/authStore";
 
@@ -49,10 +52,28 @@ const routeConfig = {
     icon: Truck,
     defaultRole: 'user' // Available to all users by default
   },
-  'slip': {
-    path: '/slip',
-    label: 'Slip',
-    icon: FileText,
+  // 'slip': {
+  //   path: '/slip',
+  //   label: 'Slip',
+  //   icon: FileText,
+  //   defaultRole: 'user'
+  // },
+  'getin': {
+    path: '/getin',
+    label: 'Get In',
+    icon: ArrowDownLeft,
+    defaultRole: 'user'
+  },
+  'getout': {
+    path: '/getout',
+    label: 'Get Out',
+    icon: ArrowUpRight,
+    defaultRole: 'user'
+  },
+  'invoice': {
+    path: '/invoice',
+    label: 'Invoice',
+    icon: Receipt,
     defaultRole: 'user'
   },
   'pete': {

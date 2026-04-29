@@ -16,6 +16,9 @@ import Settings from "./pages/Settings";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Inventory from "./pages/Inventory";
 import Stock from "./pages/Stock";
+import GetIn from "./pages/Getin";
+import GetOut from "./pages/GetOut";
+import Invoice from "./pages/Invoice";
 
 function App() {
   return (
@@ -43,14 +46,14 @@ function App() {
             }
           />
           {/* SLIP (NEW & IMPORTANT) */}
-          <Route
+          {/* <Route
             path="slip"
             element={
               <ProtectedRoute requiredPage="slip">
                 <Slip />
               </ProtectedRoute>
             }
-          />
+          /> */}
 
           {/* Admin only routes */}
           <Route
@@ -98,6 +101,30 @@ function App() {
             element={
               <ProtectedRoute requiredPage="settings">
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/getin"
+            element={
+              <ProtectedRoute>
+                <GetIn />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/getout"
+            element={
+              <ProtectedRoute>
+                <GetOut />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invoice"
+            element={
+              <ProtectedRoute>
+                <Invoice />
               </ProtectedRoute>
             }
           />
