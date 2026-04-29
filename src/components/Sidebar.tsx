@@ -13,6 +13,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Receipt,
+  Bell,
 } from "lucide-react";
 import useAuthStore from "../store/authStore";
 
