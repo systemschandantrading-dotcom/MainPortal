@@ -158,7 +158,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
         </div>
         
         {/* Collapse Toggle Button for Desktop (Floating circular arrow) */}
-        {!onClose && setIsCollapsed && (
+        {setIsCollapsed && (
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="hidden lg:flex absolute -right-3 top-6 items-center justify-center w-6 h-6 bg-indigo-800 border border-indigo-600 rounded-full text-indigo-200 hover:text-white hover:bg-indigo-700 shadow-md focus:outline-none transition-all duration-200 z-50"
