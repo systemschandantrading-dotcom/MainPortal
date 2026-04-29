@@ -107,7 +107,7 @@ function App() {
           <Route
             path="/getin"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPage="getin">
                 <GetIn />
               </ProtectedRoute>
             }
@@ -115,7 +115,7 @@ function App() {
           <Route
             path="/getout"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPage="getout">
                 <GetOut />
               </ProtectedRoute>
             }
@@ -123,14 +123,21 @@ function App() {
           <Route
             path="/invoice"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPage="invoice">
                 <Invoice />
               </ProtectedRoute>
             }
           />
 
           {/* Shared routes */}
-          <Route path="vehicle-approval" element={<VehicleApproval />} />
+          <Route
+            path="vehicle-approval"
+            element={
+              <ProtectedRoute requiredPage="vehicle-approval">
+                <VehicleApproval />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

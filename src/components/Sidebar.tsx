@@ -103,9 +103,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const hasPageAccess = (pageKey: string): boolean => {
     const route = routeConfig[pageKey as keyof typeof routeConfig];
 
-    // Always allow routes that are public by default
-    if (route?.defaultRole === 'user') return true;
-
     // If no user is logged in, non-public routes are not visible
     if (!user) return false;
 
