@@ -142,7 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
   const accessibleRoutes = getAccessibleRoutes();
 
   return (
-    <div className="flex flex-col h-full bg-indigo-900 transition-all duration-300">
+    <div className="relative flex flex-col h-full bg-indigo-900 transition-all duration-300">
       {/* Header with Text Only & Collapse Toggle */}
       <div className={`flex items-center py-5 border-b border-indigo-700 transition-all duration-300 ${isCollapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'flex-1'}`}>
@@ -157,14 +157,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
           )}
         </div>
         
-        {/* Collapse Toggle Button for Desktop */}
+        {/* Collapse Toggle Button for Desktop (Floating circular arrow) */}
         {!onClose && setIsCollapsed && (
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className={`hidden lg:flex p-2 text-indigo-200 rounded-lg hover:text-white hover:bg-indigo-800 focus:outline-none transition-all duration-200 ${isCollapsed ? 'absolute left-20 ml-2 bg-indigo-800 shadow-md z-50' : ''}`}
+            className="hidden lg:flex absolute -right-3 top-6 items-center justify-center w-6 h-6 bg-indigo-800 border border-indigo-600 rounded-full text-indigo-200 hover:text-white hover:bg-indigo-700 shadow-md focus:outline-none transition-all duration-200 z-50"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
-            {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
         )}
 
