@@ -35,7 +35,7 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/purchase" replace />} />
+          <Route index element={<Navigate to="/master" replace />} />
           {/* PURCHASE */}
           <Route
             path="purchase"
@@ -59,7 +59,7 @@ function App() {
           <Route
             path="/master"
             element={
-              <ProtectedRoute requiredPage="master">
+              <ProtectedRoute>
                 <Master />
               </ProtectedRoute>
             }

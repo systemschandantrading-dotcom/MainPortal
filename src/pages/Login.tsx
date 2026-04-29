@@ -31,12 +31,8 @@ const Login = () => {
         // Get the user info after login
         const loggedInUser = useAuthStore.getState().user;
         
-        // Redirect based on role
-        if (loggedInUser?.role?.toLowerCase() === "admin") {
-          navigate("/master", { state: { showSuccessModal: true } });
-        } else {
-          navigate("/", { state: { showSuccessModal: true } });
-        }
+        // Redirect to /master by default
+        navigate("/master", { state: { showSuccessModal: true } });
         
         toast.success("Login successful!");
       } else {

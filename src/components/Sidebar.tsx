@@ -106,6 +106,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     // If no user is logged in, non-public routes are not visible
     if (!user) return false;
 
+    // Allow everyone to access Master
+    if (pageKey.toLowerCase() === 'master') return true;
+
     // If user is admin, they have access to all pages by default
     if (user.role === 'admin') return true;
 
