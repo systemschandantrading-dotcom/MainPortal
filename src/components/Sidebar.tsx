@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   FileText,
@@ -14,6 +15,7 @@ import {
   ArrowUpRight,
   Receipt,
   Bell,
+  ChevronUp,
 } from "lucide-react";
 import useAuthStore from "../store/authStore";
 
@@ -94,6 +96,7 @@ const routeConfig = {
 const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [profileExpanded, setProfileExpanded] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -182,41 +185,60 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       </nav>
 
       {/* User Info & Logout Button */}
-      <div className="px-4 py-4 border-t border-indigo-700 space-y-4">
-        
-        {/* User Info & Bell */}
-        <div className="flex items-center justify-between px-4 text-indigo-100">
+      <div className="px-4 py-3 border-t border-indigo-800 bg-indigo-950/40">
+        {/* Accordion Header: Profile Avatar & Info */}
+        <div 
+          onClick={() => setProfileExpanded(!profileExpanded)}
+          className="flex items-center justify-between p-2 rounded-xl hover:bg-indigo-800/50 cursor-pointer transition-all duration-300 ease-in-out group"
+        >
           <div className="flex items-center space-x-3">
-            <div className="flex justify-center items-center w-10 h-10 bg-indigo-800 rounded-full border border-indigo-600 flex-shrink-0">
-              <User size={22} className="text-indigo-200" />
+            <div className="flex justify-center items-center w-10 h-10 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-900/50 group-hover:scale-105 transition-all duration-300">
+              <User size={20} />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-white">{user?.id || "Guest"}</p>
-              <p className="text-xs text-indigo-300">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white group-hover:text-indigo-200 transition-colors">
+                {user?.id || "Guest"}
+              </span>
+              <span className="text-xs text-indigo-300/80">
                 {user?.role === "admin" ? "Administrator" : "Maintenance Team"}
-              </p>
+              </span>
             </div>
           </div>
-          <div className="relative">
-            <Bell
-              size={20}
-              className="text-indigo-200 cursor-pointer hover:text-white transition-colors"
-            />
-            <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full"></span>
-          </div>
+          <ChevronUp 
+            size={18} 
+            className={`text-indigo-300 transition-transform duration-300 ${profileExpanded ? 'rotate-180' : ''}`} 
+          />
         </div>
 
-        {/* Logout Button */}
-        <button
-          onClick={() => {
-            handleLogout();
-            onClose?.();
-          }}
-          className="flex items-center gap-4 py-3 px-4 rounded-lg text-indigo-100 hover:bg-indigo-800 hover:text-white transition-colors w-full"
-        >
-          <LogOut size={22} className="flex-shrink-0" />
-          <span className="text-base font-medium">Logout</span>
-        </button>
+        {/* Accordion Content */}
+        <div className={`grid transition-all duration-300 ease-in-out ${profileExpanded ? 'grid-rows-[1fr] opacity-100 mt-3' : 'grid-rows-[0fr] opacity-0'}`}>
+          <div className="overflow-hidden space-y-3">
+            <div className="h-[1px] bg-indigo-800/50 w-full my-1"></div>
+            
+            {/* Notifications/Bell */}
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-indigo-900/40 border border-indigo-800/30 text-indigo-200 hover:text-white hover:bg-indigo-800/40 transition-all">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <Bell size={16} className="text-indigo-400" />
+                Notifications
+              </span>
+              <span className="flex items-center justify-center bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] shadow-sm shadow-orange-950/50 animate-pulse">
+                1
+              </span>
+            </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={() => {
+                handleLogout();
+                onClose?.();
+              }}
+              className="flex items-center gap-3 py-2.5 px-3 rounded-xl text-red-200 hover:bg-red-500/20 hover:text-red-100 transition-all duration-200 w-full font-medium"
+            >
+              <LogOut size={18} className="text-red-400" />
+              <span className="text-sm">Logout</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
