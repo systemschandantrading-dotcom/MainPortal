@@ -14,13 +14,15 @@ import {
   ArrowUpRight,
   Receipt,
   Bell,
-  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { useState } from "react";
 import useAuthStore from "../store/authStore";
 
 interface SidebarProps {
   onClose?: () => void;
+  isCollapsed?: boolean;
+  setIsCollapsed?: (collapsed: boolean) => void;
 }
 
 // Define the route mapping configuration
@@ -93,10 +95,9 @@ const routeConfig = {
   }
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCollapsed }) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -142,13 +143,30 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   return (
     <div className="flex flex-col h-full bg-indigo-900 ">
-      {/* Header with Text Only */}
-      <div className="flex justify-between items-center px-4 py-5 border-b border-indigo-700">
+      {/* Header with Text Only & Collapse Toggle */}
+      <div className={`flex items-center px-4 py-5 border-b border-indigo-700 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
         <div className="flex items-center flex-1">
-          <p className="text-white font-bold text-lg tracking-wide">
-            Chandan<span className="text-orange-400">Trading</span>
-          </p>
+          {isCollapsed ? (
+            <p className="text-white font-bold text-xl tracking-wide">
+              C<span className="text-orange-400">T</span>
+            </p>
+          ) : (
+            <p className="text-white font-bold text-lg tracking-wide">
+              Chandan<span className="text-orange-400">Trading</span>
+            </p>
+          )}
         </div>
+        
+        {/* Collapse Toggle Button for Desktop */}
+        {!onClose && setIsCollapsed && (
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="hidden lg:flex p-1.5 text-indigo-200 rounded-md hover:text-white hover:bg-indigo-800 focus:outline-none transition-colors"
+          >
+            {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+          </button>
+        )}
+
         {onClose && (
           <button
             onClick={() => onClose?.()}
@@ -168,8 +186,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
             <NavLink
               key={pageKey}
               to={route.path}
+              title={route.label}
               className={({ isActive }) =>
-                `flex items-center gap-4 py-3 px-4 rounded-lg transition-colors ${
+                `flex items-center rounded-lg transition-all duration-300 ${isCollapsed ? 'justify-center px-0 py-3' : 'gap-4 px-4 py-3'} ${
                   isActive
                     ? "bg-indigo-800 text-white"
                     : "text-indigo-100 hover:bg-indigo-800 hover:text-white"
@@ -178,64 +197,56 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
               onClick={() => onClose?.()}
             >
               <IconComponent size={22} className="flex-shrink-0" />
-              <span className="text-base font-medium">{route.label}</span>
+              {!isCollapsed && (
+                <span className="text-base font-medium whitespace-nowrap animate-fade-in">{route.label}</span>
+              )}
             </NavLink>
           );
         })}
       </nav>
 
-      {/* User Info & Actions */}
-      <div className="px-3 py-3 border-t border-indigo-800 bg-indigo-950/40">
-        {/* Collapsible Menu */}
-        <div 
-          className={`overflow-hidden transition-all duration-300 ease-in-out ${
-            userMenuOpen ? 'max-h-40 opacity-100 mb-2' : 'max-h-0 opacity-0'
-          }`}
-        >
-          {/* Bell Notification inside Menu */}
-          <div className="flex items-center justify-between px-4 py-2 rounded-lg text-indigo-200 hover:bg-indigo-800/50 hover:text-white transition-colors cursor-pointer mb-1">
-            <div className="flex items-center gap-3">
-              <Bell size={20} className="flex-shrink-0" />
-              <span className="text-sm font-medium">Notifications</span>
+      {/* User Info & Logout Button */}
+      <div className="px-4 py-4 border-t border-indigo-700 space-y-4">
+        
+        {/* User Info & Bell */}
+        <div className={`flex items-center text-indigo-100 ${isCollapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
+          <div className="flex items-center space-x-3">
+            <div className="flex justify-center items-center w-10 h-10 bg-indigo-800 rounded-full border border-indigo-600 flex-shrink-0">
+              <User size={22} className="text-indigo-200" />
             </div>
-            <span className="flex h-2 w-2 rounded-full bg-orange-500"></span>
+            {!isCollapsed && (
+              <div className="animate-fade-in">
+                <p className="text-sm font-semibold text-white whitespace-nowrap">{user?.id || "Guest"}</p>
+                <p className="text-xs text-indigo-300 whitespace-nowrap">
+                  {user?.role === "admin" ? "Administrator" : "Maintenance Team"}
+                </p>
+              </div>
+            )}
           </div>
-
-          {/* Logout Button */}
-          <button
-            onClick={() => {
-              handleLogout();
-              onClose?.();
-            }}
-            className="flex items-center gap-3 py-2 px-4 rounded-lg text-indigo-200 hover:bg-indigo-800/50 hover:text-white transition-colors w-full text-left"
-          >
-            <LogOut size={20} className="flex-shrink-0" />
-            <span className="text-sm font-medium">Logout</span>
-          </button>
+          {!isCollapsed && (
+            <div className="relative animate-fade-in">
+              <Bell
+                size={20}
+                className="text-indigo-200 cursor-pointer hover:text-white transition-colors"
+              />
+              <span className="absolute top-0 right-0 w-2 h-2 bg-orange-500 rounded-full"></span>
+            </div>
+          )}
         </div>
 
-        {/* User Profile Card (Trigger) */}
-        <button 
-          onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className="flex items-center justify-between w-full p-2 rounded-xl bg-indigo-800/40 hover:bg-indigo-800/60 transition-all border border-indigo-700/30 text-indigo-100 group"
+        {/* Logout Button */}
+        <button
+          onClick={() => {
+            handleLogout();
+            onClose?.();
+          }}
+          title="Logout"
+          className={`flex items-center rounded-lg text-indigo-100 hover:bg-indigo-800 hover:text-white transition-all duration-300 ${isCollapsed ? 'justify-center px-0 py-3' : 'gap-4 px-4 py-3 w-full'}`}
         >
-          <div className="flex items-center space-x-3">
-            <div className="flex justify-center items-center w-10 h-10 bg-indigo-600 rounded-xl shadow-md group-hover:scale-105 transition-transform flex-shrink-0">
-              <User size={22} className="text-white" />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-white leading-tight">{user?.id || "Guest"}</p>
-              <p className="text-xs text-indigo-300 leading-tight mt-0.5">
-                {user?.role === "admin" ? "Administrator" : "Maintenance Team"}
-              </p>
-            </div>
-          </div>
-          <ChevronUp 
-            size={18} 
-            className={`text-indigo-300 transition-transform duration-300 flex-shrink-0 mr-1 ${
-              userMenuOpen ? 'rotate-180' : ''
-            }`} 
-          />
+          <LogOut size={22} className="flex-shrink-0" />
+          {!isCollapsed && (
+            <span className="text-base font-medium whitespace-nowrap animate-fade-in">Logout</span>
+          )}
         </button>
       </div>
     </div>

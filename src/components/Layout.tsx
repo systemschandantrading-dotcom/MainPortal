@@ -6,6 +6,7 @@ import Header from './Header';
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-gray-50">
@@ -19,10 +20,15 @@ const Layout: React.FC = () => {
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-30 w-64 transform bg-indigo-900 transition duration-300 ease-in-out lg:static lg:translate-x-0
+        fixed inset-y-0 left-0 z-30 transform bg-indigo-900 transition-all duration-300 ease-in-out lg:static lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isCollapsed ? 'lg:w-20' : 'lg:w-64 w-64'}
       `}>
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+        <Sidebar 
+          onClose={() => setSidebarOpen(false)} 
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+        />
       </div>
 
       {/* Main content wrapper */}
