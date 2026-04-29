@@ -180,7 +180,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
       </div>
 
       {/* Navigation Links */}
-      <nav className="overflow-y-auto flex-1 px-4 py-6 space-y-2">
+      <nav className="overflow-y-auto flex-1 px-4 py-6 space-y-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {accessibleRoutes.map(([pageKey, route]) => {
           const IconComponent = route.icon;
           return (
@@ -207,10 +207,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
       </nav>
 
       {/* User Info & Logout Button */}
-      <div className="px-4 py-4 border-t border-indigo-700 space-y-4">
+      <div className={`py-4 border-t border-indigo-700 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
         
         {/* User Info & Bell */}
-        <div className={`flex items-center text-indigo-100 ${isCollapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
+        <div className={`flex items-center text-indigo-100 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           <div className="flex items-center space-x-3">
             <div className="flex justify-center items-center w-10 h-10 bg-indigo-800 rounded-full border border-indigo-600 flex-shrink-0">
               <User size={22} className="text-indigo-200" />
@@ -242,7 +242,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose, isCollapsed = false, setIsCo
             onClose?.();
           }}
           title="Logout"
-          className={`flex items-center rounded-lg text-indigo-100 hover:bg-indigo-800 hover:text-white transition-all duration-300 ${isCollapsed ? 'justify-center px-0 py-3' : 'gap-4 px-4 py-3 w-full'}`}
+          className={`flex items-center rounded-lg text-indigo-100 hover:bg-indigo-800 hover:text-white transition-all duration-300 ${isCollapsed ? 'justify-center p-3' : 'gap-4 px-4 py-3 w-full'}`}
         >
           <LogOut size={22} className="flex-shrink-0" />
           {!isCollapsed && (
